@@ -13,17 +13,21 @@ My Claude Code profile, kept in one place so every machine has the same setup.
 
 ## Set up a machine
 
-Needs Claude Code, git and Node.js.
+Needs Claude Code and Node.js. No clone is needed.
 
-1. Clone this repository and open the folder in Claude Code.
-2. Paste the prompt from [SETUP-PROMPT.md](SETUP-PROMPT.md).
+1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, the script, the skill and the hook.
+2. Paste it into Claude Code on that machine.
 3. Start a new session.
 
-Run the same prompt again after a `git pull` to update a machine.
+Paste the latest version of the same prompt again to update a machine.
 
 ## Change the profile
 
-Edit the files on one machine, then copy them back into `profile/` and commit. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, `scripts/project-scaffold.mjs` and `skills/sweep/SKILL.md` into `profile/` and show me the diff".
+`profile/` is the source. `SETUP-PROMPT.md` is generated from it.
+
+1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, `scripts/project-scaffold.mjs` and `skills/sweep/SKILL.md` into `profile/` and show me the diff".
+2. Run `node build-prompt.mjs` to rebuild the prompt.
+3. Commit both.
 
 Keep secrets out: no tokens, no `settings.json` from a real machine, no memory files.
 
