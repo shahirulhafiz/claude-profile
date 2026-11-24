@@ -43,7 +43,7 @@ Never overwrite an existing file without saving a copy first, as @@<name>.bak-YY
 1. **File 1, profile rules.** Compare it with @@<CLAUDE>/CLAUDE.md@@.
    - If the target does not exist, write File 1 there.
    - If it exists, merge by section (each @@# Heading@@): add sections that are missing, replace sections with the same heading by the version in File 1, and keep sections that exist only on this machine. Keep the order of File 1, with this machine's own sections at the end.
-   - A section that differs only in spacing or line endings is replaced without asking.
+   - A section that differs only in spacing or line endings, or that is a shorter or older version saying nothing File 1 contradicts, is replaced without asking.
    - If a section on this machine says something different from File 1 (a different rule, not just different wording of the same rule), show me both versions and ask which to keep before you replace it. Until I answer, leave my version where File 1's section would go.
    - If a section I keep contradicts a section you added from File 1, tell me which two and ask.
 
@@ -61,7 +61,7 @@ Then check your work and report:
 
 - @@<CLAUDE>/settings.json@@ still parses as JSON.
 - @@node --check@@ passes for each of the three scripts in @@<CLAUDE>/scripts/@@.
-- Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders):@@node <CLAUDE>/scripts/project-scaffold.mjs <that folder>@@. It must create @@CLAUDE.md@@, @@specs/prd.md@@, @@specs/tickets/README.md@@, @@memory/index.md@@, @@memory/log.md@@, @@memory/README.md@@, @@archive/INDEX.md@@ and @@.claude/settings.json@@.
+- Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): @@node <CLAUDE>/scripts/project-scaffold.mjs <that folder>@@. It must create @@CLAUDE.md@@, @@specs/prd.md@@, @@specs/tickets/README.md@@, @@memory/index.md@@, @@memory/log.md@@, @@memory/README.md@@, @@archive/INDEX.md@@ and @@.claude/settings.json@@.
 - Run @@node <CLAUDE>/scripts/session-brief.mjs@@ with @@{"cwd":"<that folder, forward slashes>"}@@ on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 

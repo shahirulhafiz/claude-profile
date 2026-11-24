@@ -60,11 +60,11 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 
 - Target: memory/<file>.md   (or: CLAUDE.md, flag only)
 - Target hash: <output of `sha256sum <file>` on the file as it is on disk now, or "new file">
-- Evidence: sessions <id8>, <id8> (<how many of n>); <one short quote or fact per session>
+- Evidence: sessions <id8> (<date>), <id8> (<date>) (<how many of n>); <one short quote or fact per session>
 - Checked against the app: <"yes", "partly" or "no">: <what you looked at and what it showed, and what you could not check>
 - Proposed text:
 
-  <the memory body, or the exact old line and new line>
+  <the memory body, or the exact old line and new line; for an update that changes the fact, also the new title and description>
 ```
 
 `flag` is the only action allowed for `CLAUDE.md` and rules files: it tells the user about a contradiction and proposes no edit.
@@ -79,14 +79,14 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
    In "Checked" write yes, partly or no, and for "partly" say what was not checked. Ask which numbers to apply: all, some or none.
 
 2. Apply only the approved numbers. For each:
-   - **Concurrency check**: run `sha256sum` on the target file now. If the result differs from "Target hash", the file changed after the dream. Do not write: show the user the current text and the proposal, and ask.
+   - **Concurrency check**: run `sha256sum` on the target file now. If the result differs from "Target hash", the file changed after the dream. For a "new file" target, the check is that the file still does not exist. If the check fails, the proposal is blocked: do not write, show the user the current text and the proposal, and ask. An earlier "all" does not cover a blocked proposal; it needs its own answer.
    - **add**: create `memory/<slug>.md` as a strict OKF file (follow `memory/README.md`). The slug is two to four words from the title, in kebab case. Set `sources` to the sessions (`id: s<id8>`, `resource: "Claude session <id8>, <date>"`) and cite them in the body as footnotes (`[^s<id8>]`). Set `generated` to you and now, `status: stable`, and `verified` with `human:<user id>` at now, because the user just approved it. Write times with an offset, as `memory/README.md` says. Add `stale_after` when the fact is tied to something that moves.
    - **update**: change the fact, and the `title`, `description` and index line when they state the old fact. Set `generated.at` to now. Keep the existing `sources` and `verified` entries and add the new ones.
    - **deprecate**: set `status: deprecated` and, when there is a replacement, `superseded_by`. Do not delete or move the file; `/sweep` archives it later.
    - **merge**: keep one file, deprecate the other with `superseded_by` pointing at the kept one.
    - **flag**: change nothing. If the user wants the `CLAUDE.md` line changed, they say so and you make that edit as its own request.
    - Update `memory/index.md`, and add one line per change to `memory/log.md` under today's `## YYYY-MM-DD` heading (newest day first): `* **Dream**: <what changed> (sessions <ids>).`
-3. Delete `PENDING.md` once every proposal is either applied or declined. Declined proposals are simply dropped.
+3. Rewrite `PENDING.md` so it holds only the proposals that are still open (blocked and waiting for an answer), with their "Target hash" updated to the file as it is now. Delete `PENDING.md` when none is open. Applied and declined proposals are removed from it; declined ones are simply dropped.
 4. Do not commit unless the user asks. Finish with what was applied, what was declined and what was blocked by the concurrency check.
 
 ## Limits to tell the user about when relevant

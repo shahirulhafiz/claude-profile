@@ -23,7 +23,7 @@ Three things carry work from one session to the next. Use all three.
   - When it says `DREAM PROPOSALS WAITING`, tell the user once that `/dream` shows them.
   - Never apply a proposal without the user's yes. A dream never edits `CLAUDE.md` or rules files; it only flags them.
 
-Commit messages are part of this: say what changed and why, so the next session can read the history.
+Commit messages are part of this: when you do commit, say what changed and why, so the next session can read the history. This is not a reason to commit: commit only when the user asks.
 
 # Memory format (OKF)
 

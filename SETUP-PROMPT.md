@@ -15,7 +15,7 @@ Never overwrite an existing file without saving a copy first, as `<name>.bak-YYY
 1. **File 1, profile rules.** Compare it with `<CLAUDE>/CLAUDE.md`.
    - If the target does not exist, write File 1 there.
    - If it exists, merge by section (each `# Heading`): add sections that are missing, replace sections with the same heading by the version in File 1, and keep sections that exist only on this machine. Keep the order of File 1, with this machine's own sections at the end.
-   - A section that differs only in spacing or line endings is replaced without asking.
+   - A section that differs only in spacing or line endings, or that is a shorter or older version saying nothing File 1 contradicts, is replaced without asking.
    - If a section on this machine says something different from File 1 (a different rule, not just different wording of the same rule), show me both versions and ask which to keep before you replace it. Until I answer, leave my version where File 1's section would go.
    - If a section I keep contradicts a section you added from File 1, tell me which two and ask.
 
@@ -33,7 +33,7 @@ Then check your work and report:
 
 - `<CLAUDE>/settings.json` still parses as JSON.
 - `node --check` passes for each of the three scripts in `<CLAUDE>/scripts/`.
-- Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders):`node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
+- Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): `node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
 - Run `node <CLAUDE>/scripts/session-brief.mjs` with `{"cwd":"<that folder, forward slashes>"}` on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 
@@ -67,7 +67,7 @@ Three things carry work from one session to the next. Use all three.
   - When it says `DREAM PROPOSALS WAITING`, tell the user once that `/dream` shows them.
   - Never apply a proposal without the user's yes. A dream never edits `CLAUDE.md` or rules files; it only flags them.
 
-Commit messages are part of this: say what changed and why, so the next session can read the history.
+Commit messages are part of this: when you do commit, say what changed and why, so the next session can read the history. This is not a reason to commit: commit only when the user asks.
 
 # Memory format (OKF)
 
@@ -799,11 +799,11 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 
 - Target: memory/<file>.md   (or: CLAUDE.md, flag only)
 - Target hash: <output of `sha256sum <file>` on the file as it is on disk now, or "new file">
-- Evidence: sessions <id8>, <id8> (<how many of n>); <one short quote or fact per session>
+- Evidence: sessions <id8> (<date>), <id8> (<date>) (<how many of n>); <one short quote or fact per session>
 - Checked against the app: <"yes", "partly" or "no">: <what you looked at and what it showed, and what you could not check>
 - Proposed text:
 
-  <the memory body, or the exact old line and new line>
+  <the memory body, or the exact old line and new line; for an update that changes the fact, also the new title and description>
 ```
 
 `flag` is the only action allowed for `CLAUDE.md` and rules files: it tells the user about a contradiction and proposes no edit.
@@ -818,14 +818,14 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
    In "Checked" write yes, partly or no, and for "partly" say what was not checked. Ask which numbers to apply: all, some or none.
 
 2. Apply only the approved numbers. For each:
-   - **Concurrency check**: run `sha256sum` on the target file now. If the result differs from "Target hash", the file changed after the dream. Do not write: show the user the current text and the proposal, and ask.
+   - **Concurrency check**: run `sha256sum` on the target file now. If the result differs from "Target hash", the file changed after the dream. For a "new file" target, the check is that the file still does not exist. If the check fails, the proposal is blocked: do not write, show the user the current text and the proposal, and ask. An earlier "all" does not cover a blocked proposal; it needs its own answer.
    - **add**: create `memory/<slug>.md` as a strict OKF file (follow `memory/README.md`). The slug is two to four words from the title, in kebab case. Set `sources` to the sessions (`id: s<id8>`, `resource: "Claude session <id8>, <date>"`) and cite them in the body as footnotes (`[^s<id8>]`). Set `generated` to you and now, `status: stable`, and `verified` with `human:<user id>` at now, because the user just approved it. Write times with an offset, as `memory/README.md` says. Add `stale_after` when the fact is tied to something that moves.
    - **update**: change the fact, and the `title`, `description` and index line when they state the old fact. Set `generated.at` to now. Keep the existing `sources` and `verified` entries and add the new ones.
    - **deprecate**: set `status: deprecated` and, when there is a replacement, `superseded_by`. Do not delete or move the file; `/sweep` archives it later.
    - **merge**: keep one file, deprecate the other with `superseded_by` pointing at the kept one.
    - **flag**: change nothing. If the user wants the `CLAUDE.md` line changed, they say so and you make that edit as its own request.
    - Update `memory/index.md`, and add one line per change to `memory/log.md` under today's `## YYYY-MM-DD` heading (newest day first): `* **Dream**: <what changed> (sessions <ids>).`
-3. Delete `PENDING.md` once every proposal is either applied or declined. Declined proposals are simply dropped.
+3. Rewrite `PENDING.md` so it holds only the proposals that are still open (blocked and waiting for an answer), with their "Target hash" updated to the file as it is now. Delete `PENDING.md` when none is open. Applied and declined proposals are removed from it; declined ones are simply dropped.
 4. Do not commit unless the user asks. Finish with what was applied, what was declined and what was blocked by the concurrency check.
 
 ## Limits to tell the user about when relevant
