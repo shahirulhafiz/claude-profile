@@ -8,6 +8,11 @@
             "type": "command",
             "command": "node \"<HOME>/.claude/scripts/project-scaffold.mjs\"",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "node \"<HOME>/.claude/scripts/session-brief.mjs\"",
+            "timeout": 15
           }
         ]
       }

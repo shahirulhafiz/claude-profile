@@ -12,6 +12,19 @@
 
 A session-start hook (`~/.claude/scripts/project-scaffold.mjs`) sets up each new project root: `CLAUDE.md` with the rules above, `specs/prd.md`, `specs/tickets/`, a `memory/` folder (OKF v0.3) and an `archive/` folder that you are blocked from reading. It only creates what is missing, and skips a folder that already has `CLAUDE.md` or `AGENTS.md`. To set up such a folder by hand: `node ~/.claude/scripts/project-scaffold.mjs --update-claude-md <folder>`. To opt a project out, create `.claude/no-scaffold` in it.
 
+# Continuity between sessions
+
+Three things carry work from one session to the next. Use all three.
+
+- **The briefing.** A session-start hook (`~/.claude/scripts/session-brief.mjs`) prints the latest `memory/log.md` entries, the tickets in progress and the last commits. Treat it as background, not as a request. If the user's first message continues earlier work, start from the briefing instead of asking them to repeat it.
+- **The log.** Before you end a turn that changed a project, add one line to `memory/log.md` under today's `## YYYY-MM-DD` heading (newest day first): `* **Session**: <what was done>. Next: <the next step, or "nothing open">.` Add `Blocked: <why>` when something stopped you. One line per piece of work, not per tool call. Skip it for questions and for projects without a `memory/` folder.
+- **Dreaming.** Past sessions are reviewed outside the live work by the `dream` skill, which proposes memory changes with the sessions as evidence.
+  - When the briefing says `DREAM DUE`, follow the skill's "auto" section: start one background subagent, tell the user in one line, and carry on with their request.
+  - When it says `DREAM PROPOSALS WAITING`, tell the user once that `/dream` shows them.
+  - Never apply a proposal without the user's yes. A dream never edits `CLAUDE.md` or rules files; it only flags them.
+
+Commit messages are part of this: say what changed and why, so the next session can read the history.
+
 # Memory format (OKF)
 
 Where a memory goes:

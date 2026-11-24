@@ -8,8 +8,11 @@ My Claude Code profile, kept in one place so every machine has the same setup.
 | --- | --- | --- |
 | `profile/CLAUDE.md` | `~/.claude/CLAUDE.md` | Global rules: the app wins over notes and plans, ticket status lines, memory in Open Knowledge Format (OKF v0.3), how to use subagents. |
 | `profile/scripts/project-scaffold.mjs` | `~/.claude/scripts/` | Sets up a project root: `CLAUDE.md`, `specs/`, an OKF `memory/` folder and an `archive/` folder Claude cannot read. Only creates what is missing. |
-| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | Session-start hook that runs the script, so a new project is set up automatically. |
+| `profile/scripts/session-brief.mjs` | `~/.claude/scripts/` | Start-of-session briefing: latest `memory/log.md` entries, tickets in progress, last commits, and whether a dream is due or proposals are waiting. |
+| `profile/scripts/session-digest.mjs` | `~/.claude/scripts/` | Shortens a project's saved session transcripts into one digest for a dream. Output stays in `~/.claude/dream/`, outside the project. |
+| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | Session-start hooks that run the scaffold and the briefing. |
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill: finds outdated TODOs, plans, rules and memories, proves each one, and changes nothing before a yes. |
+| `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill: reviews past sessions in a background subagent and proposes memory changes with the sessions as evidence. Starts automatically after 3 new sessions and 24 hours; applies nothing before a yes. |
 
 ## Set up a machine
 
