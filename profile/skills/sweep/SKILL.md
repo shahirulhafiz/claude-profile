@@ -49,7 +49,16 @@ What counts as proof:
 | CLAUDE.md / rule line | It names a file, command, path, tool or convention that the app no longer has or follows. |
 | Memory | The app or git contradicts it, its replacement exists, or the thing it names is gone. A past `stale_after` alone means "check again", not "false". |
 
-Read the subagent's evidence yourself before you accept it. Spot-check anything that would lead to a cut. Drop every `cannot tell`.
+More proof rules:
+
+- A ticket is done only when its Goal and every "Done when" point are met in the app. If the points are met but the Goal is only partly met, it is not done: propose `Status: in progress` and say what is missing.
+- A line that names something that never existed (a file a scaffold mentions but nobody has written yet) is not outdated. Leave it alone.
+- A candidate file that does not exist is skipped, not reported.
+- Verifying means reading and running read-only commands. Do not run anything that starts a server, writes files, deploys or calls an outside service.
+
+Read the subagent's evidence yourself before you accept it. Spot-check anything that would lead to a cut. Every `cannot tell` stays out of the table and goes in the "could not prove" list.
+
+If you cannot start a subagent in this session, say so in your reply and do the verification yourself by the same rules.
 
 ## Step 3: Show the list and stop
 
@@ -68,9 +77,10 @@ After the table add: "Could not prove, left alone" (short list), and the questio
 
 Apply only the approved numbers.
 
-1. Archive: move the file to `archive/<original path>` at the project root. Use `git mv` in a git repository. Add a line to `archive/INDEX.md`: date, original path, one-line reason. Write that line from what you already know; do not read the archive back.
-2. Block the archive, the first time: in the project's `.claude/settings.json`, add `"Read(./archive/**)"` to `permissions.deny` (create the file or the keys if missing; keep everything else). Tell the user this was added.
-3. Update: make the edit shown in the table. For a ticket, set the status line. For a memory, change the fact, set `generated.at` to now and add a `verified` entry for the check (`by: claude-code/<model-id>`). For a memory that is replaced, set `status: deprecated` and `superseded_by` before archiving it, and remove its line from `MEMORY.md`.
+1. Archive: first make any edit the file needs (a ticket's status line, a memory's `status: deprecated`), because you cannot read or edit it after the move. One row in the table covers both the edit and the move. Then move the file to `archive/<original path>` at the project root, with `git mv` in a git repository. Append one table row to `archive/INDEX.md` without reading the file, in exactly this form, starting on a new line: `| YYYY-MM-DD | <original path> | <one-line reason> |`.
+2. Block the archive: in the project's `.claude/settings.json`, make sure `"Read(./archive/**)"` is in `permissions.deny` (create the file or the keys if missing; keep everything else). If it is already there, change nothing. Tell the user only when you added it.
+   - To show what changed afterwards without reading the archive, use `git status --short` and `git diff -- . ":!archive"`.
+3. Update: make the edit shown in the table. For a ticket, set the status line. For a memory, change the fact, set `generated.at` to now and add a `verified` entry for the check (`by: claude-code/<model-id>`). For a memory that is replaced, set `status: deprecated` and `superseded_by` before archiving it; when nothing replaces it, set `status: deprecated` only. Remove its line from the index (`memory/index.md` or `MEMORY.md`) if it has one.
 4. Cut: remove the line. Nothing else in the file changes.
 5. A file from the project's `memory/` folder is archived like any other file: remove its line from `memory/index.md` and add a `**Deprecation**` line to `memory/log.md`. The built-in memory folder is outside the repository: archive its files to an `archive/` folder inside it instead, and never read that folder either.
 6. Do not commit unless the user asked. If they did, make one commit that lists the items by number.

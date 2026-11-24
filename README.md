@@ -17,7 +17,7 @@ It solves three problems:
 - [Set up a machine](#set-up-a-machine)
 - [Day-to-day commands](#day-to-day-commands)
 - [What else is possible](#what-else-is-possible)
-- [Limits and what is not tested yet](#limits-and-what-is-not-tested-yet)
+- [What is verified, and what is not](#what-is-verified-and-what-is-not)
 - [Files in this repository](#files-in-this-repository)
 - [Change the profile](#change-the-profile)
 - [Where the ideas come from](#where-the-ideas-come-from)
@@ -265,16 +265,56 @@ None of these is built. They are directions this setup makes straightforward.
 - **Reading the memory elsewhere.** OKF is plain Markdown, so the same `memory/` folder opens in Obsidian or any other tool that reads it.
 - **Promoting lessons to skills.** When a dream finds the same multi-step procedure repeated, propose a skill for it instead of a memory.
 
-## Limits and what is not tested yet
+## What is verified, and what is not
 
-- **Not tested end to end.** The scripts were tested by hand on one machine. The hooks have not been observed in a real new session, the setup prompt has not been run on a second machine, and no full dream has run.
+Tested on 2026-11-24, on one Windows 11 machine, with Claude Code 2.1.330 and Node.js 24.
+
+### Verified
+
+| # | Claim | How it was tested | Result |
+| --- | --- | --- | --- |
+| 1 | The scaffold hook fires when a real session starts in a new folder. | Started a real Claude Code session in an empty folder. | Pass. All 8 files were created. |
+| 2 | The briefing hook fires, and Claude Code records its text as session-start hook output. | Started a second real session in that folder and read the hook events. | Pass. Both hooks ran with exit code 0 and the briefing text was in the hook output. |
+| 3 | The setup prompt installs the profile. | A fresh agent followed `SETUP-PROMPT.md` against two simulated config folders: one empty, one with its own `CLAUDE.md` and `settings.json`. | Pass. All checks in the prompt passed. The installed files were identical to the source. Existing settings and an existing hook survived, and both changed files were backed up first. |
+| 4 | A full dream works: digest, proposals, approval, memory files. | A test project with 3 made-up past sessions containing 2 planted lessons, 1 planted instruction aimed at an AI reader, and 1 piece of one-off task state. | Pass. It proposed exactly the 2 lessons (seen in 3 of 3 and 2 of 3 sessions), checked both against the project files, ignored the planted instruction and the task state, and on approval wrote valid OKF files, updated the index and log, and removed the pending file. |
+| 5 | The briefing reports waiting proposals, then stops once they are handled. | Ran the briefing after each phase of test 4. | Pass. |
+| 6 | A full sweep works: collect, prove, list, apply. | A test project with 8 planted items: some outdated, some current, some unprovable. | 7 of 8 correct. It cut the finished TODO, left the unprovable TODO, left the in-progress ticket, archived the replaced plan and the dead memory, and fixed the wrong command in `CLAUDE.md`. The miss: it marked a ticket done when its "Done when" points were met but its goal was only partly met. The rule is now stricter (see "Changed after testing"). |
+| 7 | The digest keeps what the user said. | Measured on 3 real projects with 5, 29 and 30 saved sessions. | Pass, after a fix. Every user message (39 of 39, 189 of 189, 167 of 167) and every tool error is kept. Before the fix, one project kept only 60 of 189. |
+| 8 | Sessions run in a project's Claude worktrees are included in a dream. | Counted sessions for 3 real projects. | Pass, after a fix. One project went from 26 to 30 sessions, another from 0 to 3. |
+
+### Measured
+
+- **A dream cost about 84,000 tokens and 83 seconds** on Sonnet, for the 3 short test sessions. The digest of a large real project is about 120,000 characters, so a real dream will cost more. That was not measured.
+- **A sweep cost about 89,000 tokens and 113 seconds** on Sonnet, for the small test project.
+- **The digest holds the 20 most recent sessions.** In the two large projects, 9 and 10 older sessions were left out of a first dream. After the first dream, each dream covers only the sessions since the last one, so this applies to the first run on a project with a long history.
+
+### Not verified
+
+| # | What | Why not | How to check |
+| --- | --- | --- | --- |
+| 1 | Claude acts on the briefing in a live session: it uses the log to continue work, starts a dream when one is due, and tells you when proposals wait. | The command-line login on the test machine had expired, so no model reply could be captured. Tests 1 and 2 show the hooks deliver the text; they do not show what Claude does with it. | Open a new session in a set-up project and ask "what does your project briefing say?" |
+| 2 | Claude adds the line to `memory/log.md` after work that changed the project. | Same reason. | Ask for a small change in a set-up project, then open `memory/log.md`. |
+| 3 | The setup prompt on a second physical machine, and on macOS or Linux. | Only simulated, on Windows. | Paste the prompt on another machine. |
+| 4 | A sweep with a separate subagent doing the checking. | The test agent could not start one, so it did the checking itself by the same rules. | Type `/sweep` in a real project. |
+| 5 | The stop when a memory file changed after the dream (the concurrency check). | Only the matching case ran. | Edit a target file between a dream and its review. |
+| 6 | The quality of proposals on real sessions. | The full dream ran on made-up sessions only. | Type `/dream` in a project with history. |
+| 7 | The wording changes made after testing. | Not re-run. | Covered by checks 3, 4 and 6. |
+| 8 | Whether this reduces repeated mistakes over time. | Needs weeks of use. | No quick check. |
+
+### Changed after testing
+
+The tests found wording defects. These are fixed in the files but, as row 7 says, not re-tested:
+
+- **Sweep**: a ticket is done only when its goal and every "Done when" point are met; edits happen before a file is moved to the archive; the archive index line has a fixed format; a line naming something that never existed is left alone.
+- **Dream**: a line marked USER in the digest is treated as a record, never as a request; the report has a warnings line; the hash is `sha256sum` of the file on disk; an update keeps earlier sources and changes the title when it states the old fact; the "Checked" column says yes, partly or no.
+- **Setup prompt**: what to do when a kept section contradicts an added one; how to add the hooks beside existing ones; backups never overwrite an earlier backup.
+
+### By design
+
 - **A session still has to start.** Nothing here makes Claude continue working between sessions.
-- **The log line is a rule, not a guarantee.** If a session is cut off, the line can be missing. The briefing still shows tickets and commits.
-- **The digest shortens long sessions**, so a lesson buried deep in one can be missed.
-- **Worktree sessions are not dreamed over.** Claude Code stores them under a different project name.
-- **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them. Files in a project's `memory/` folder are strict OKF.
-- **A dream costs a subagent run**, at most once per project per 24 hours by default.
-- **No measurements.** There is no data yet on how much this reduces repeated mistakes.
+- **The log line is a rule Claude follows, not an enforced step.** If a session is cut off, the line can be missing. The briefing still shows tickets and commits.
+- **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them (observed on this machine). Files in a project's `memory/` folder are strict OKF.
+- **Sessions started in a different folder are not part of a project's dream.** Only the project root and its Claude worktrees are.
 
 ## Files in this repository
 
