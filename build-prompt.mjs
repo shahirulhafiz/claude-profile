@@ -16,6 +16,9 @@ const parts = [
   { src: 'profile/scripts/session-brief.mjs', dest: '<CLAUDE>/scripts/session-brief.mjs', lang: 'javascript' },
   { src: 'profile/scripts/require-agent-model.mjs', dest: '<CLAUDE>/scripts/require-agent-model.mjs', lang: 'javascript' },
   { src: 'profile/scripts/context-check.mjs', dest: '<CLAUDE>/scripts/context-check.mjs', lang: 'javascript' },
+  { src: 'profile/agents/reader.md', dest: '<CLAUDE>/agents/reader.md', lang: 'markdown' },
+  { src: 'profile/agents/builder.md', dest: '<CLAUDE>/agents/builder.md', lang: 'markdown' },
+  { src: 'profile/agents/reviewer.md', dest: '<CLAUDE>/agents/reviewer.md', lang: 'markdown' },
   { src: 'profile/skills/sweep/SKILL.md', dest: '<CLAUDE>/skills/sweep/SKILL.md', lang: 'markdown' },
   { src: 'profile/skills/dream/SKILL.md', dest: '<CLAUDE>/skills/dream/SKILL.md', lang: 'markdown' },
   { src: 'profile/settings.hooks.json', dest: 'merge into <CLAUDE>/settings.json', lang: 'json' },
@@ -51,25 +54,28 @@ Never overwrite an existing file without saving a copy first, as @@<name>.bak-YY
 
 2. **Files 2 to 6, scripts.** Write them to @@<CLAUDE>/scripts/@@ as @@project-scaffold.mjs@@, @@session-digest.mjs@@, @@session-brief.mjs@@, @@require-agent-model.mjs@@ and @@context-check.mjs@@.
 
-3. **Files 7 and 8, skills.** Write them to @@<CLAUDE>/skills/sweep/SKILL.md@@ and @@<CLAUDE>/skills/dream/SKILL.md@@.
+3. **Files 7, 8 and 9, worker types.** Write them to @@<CLAUDE>/agents/@@ as @@reader.md@@, @@builder.md@@ and @@reviewer.md@@. Create the folder if it is missing. If a file of the same name is already there and differs, back it up first, write the new one, and tell me which.
 
-4. **File 9, hooks.** Merge it into @@<CLAUDE>/settings.json@@.
+4. **Files 10 and 11, skills.** Write them to @@<CLAUDE>/skills/sweep/SKILL.md@@ and @@<CLAUDE>/skills/dream/SKILL.md@@.
+
+5. **File 12, hooks.** Merge it into @@<CLAUDE>/settings.json@@.
    - Replace @@<HOME>@@ in all four commands with this machine's real home folder, written with forward slashes (for example @@C:/Users/name@@ or @@/Users/name@@).
    - Keep every other key in @@settings.json@@ as it is. Create the file if it is missing.
-   - File 9 has three lists. Add its @@SessionStart@@ entry (matcher @@startup@@ with its two commands) as its own entry in the @@SessionStart@@ list, its @@UserPromptSubmit@@ entry (no matcher, one command) as its own entry in the @@UserPromptSubmit@@ list, and its @@PreToolUse@@ entry (matcher @@Agent|Task@@ with its one command) as its own entry in the @@PreToolUse@@ list. Leave the other entries in all three lists as they are.
+   - File 12 has three lists. Add its @@SessionStart@@ entry (matcher @@startup@@ with its two commands) as its own entry in the @@SessionStart@@ list, its @@UserPromptSubmit@@ entry (no matcher, one command) as its own entry in the @@UserPromptSubmit@@ list, and its @@PreToolUse@@ entry (matcher @@Agent|Task@@ with its one command) as its own entry in the @@PreToolUse@@ list. Leave the other entries in all three lists as they are.
    - If a hook whose command contains @@project-scaffold.mjs@@, @@session-brief.mjs@@, @@require-agent-model.mjs@@ or @@context-check.mjs@@ is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
 
 Then check your work and report:
 
 - @@<CLAUDE>/settings.json@@ still parses as JSON.
 - @@node --check@@ passes for each of the five scripts in @@<CLAUDE>/scripts/@@.
+- Each of the three files in @@<CLAUDE>/agents/@@ starts with a @@---@@ block that has @@name@@, @@description@@, @@tools@@ and @@model@@.
 - In the system temp folder, write a file holding the one line @@{"type":"assistant","timestamp":"<the time now, ISO 8601>","message":{"usage":{"input_tokens":300000}}}@@. Run @@node <CLAUDE>/scripts/context-check.mjs@@ with @@{"transcript_path":"<that file, forward slashes>"}@@ on standard input. It must exit with code 0 and print one line that starts with @@Context check:@@. With @@300000@@ changed to @@1000@@ it must print nothing. Delete the file afterwards.
 - Run @@node <CLAUDE>/scripts/require-agent-model.mjs@@ with @@{"tool_name":"Agent","tool_input":{"prompt":"x"}}@@ on standard input. It must exit with code 2 and print a line saying the call names no model. With @@"model":"sonnet"@@ added to @@tool_input@@ it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): @@node <CLAUDE>/scripts/project-scaffold.mjs <that folder>@@. It must create @@CLAUDE.md@@, @@specs/prd.md@@, @@specs/tickets/README.md@@, @@memory/index.md@@, @@memory/log.md@@, @@memory/README.md@@, @@archive/INDEX.md@@ and @@.claude/settings.json@@.
 - Run @@node <CLAUDE>/scripts/session-brief.mjs@@ with @@{"cwd":"<that folder, forward slashes>"}@@ on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 
-Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks and the skills load at session start.
+Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills and the worker types load at session start.
 `.replaceAll('@@', '`');
 
 const prompt = `${instructions}\n${blocks}\n`;

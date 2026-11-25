@@ -32,6 +32,7 @@ It solves three problems:
 | Session briefing | Gives Claude the latest log entries, tickets in progress and recent commits. | Automatically, at the start of every session |
 | Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before every subagent call |
 | Context check | Adds a note for Claude when the conversation has grown large, or is picked up again after a break, so it suggests a new session at the next approval point. | Automatically, each time you send a message |
+| Lean worker types | Three subagent types, `reader`, `builder` and `reviewer`, that carry only the tools they need, so each starts with far less context than a general-purpose one. | Whenever Claude starts a subagent of that type |
 | Memory in Open Knowledge Format (OKF) | Every memory records where it came from, who confirmed it, its status and when to check it again. | Whenever Claude saves a memory |
 | `/dream` | Reviews past sessions in the background and proposes memory changes, with the sessions as evidence. | Automatically after 3 new sessions and 24 hours; you approve with `/dream` |
 | `/sweep` | Finds outdated TODOs, plans, rules and memories, proves each against the code, and proposes what to archive, update or cut. | When you type `/sweep` |
@@ -66,6 +67,7 @@ The global `CLAUDE.md` loads in every session. The main rules are:
 - **Check before building.** For a feature request that is not a numbered ticket, Claude compares it with `specs/prd.md` and the tickets first, flags overlap or conflict, and asks before building.
 - **Ticket status.** Every ticket carries `Status: not started`, `Status: in progress` or `Status: done`, checked against the app.
 - **Workers get a named model.** Claude plans the work itself and gives tasks that can run side by side to subagents: sonnet for simple tasks, opus for harder ones, haiku for file search and logs. Every subagent call names its model.
+- **The leanest worker that can do the job.** `reader` to find and read files, `reviewer` to check a change or run a read-only command, `builder` to change files. See [Lean workers](#lean-workers).
 - **Sessions stay small.** One session per ticket or phase, with subagents doing the heavy reading and the building. See [Keeping the session small](#keeping-the-session-small).
 
 ### The model check
@@ -89,6 +91,22 @@ The rules in `CLAUDE.md` aim at three habits:
 A hook runs `context-check.mjs` each time you send a message. It reads the size of the conversation from the session's transcript and adds one line for Claude in two cases: the conversation is at 250,000 tokens or more, or it is at 150,000 or more and has been idle for over an hour. After a break the note tells Claude to say so straight away, because the cost falls on the very next turn; otherwise it waits for the next approval point. The hook only advises. It cannot start or shorten a session, and it never blocks a message.
 
 This came from measuring one long working session. Its conversation grew from 94,000 to 829,000 tokens with no reset. File reads by the main session made up 27% of that and files it wrote itself 20%. It was also picked up again after a 94-minute break at 453,000 tokens, which sent all of that again at full price.
+
+### Lean workers
+
+Every subagent pays its own starting context: the tools, lists and instructions it is given before it reads a single file. A general-purpose subagent is given everything the main session has.
+
+The profile adds three types that are given only what they need:
+
+| Type | Tools | For |
+| --- | --- | --- |
+| `reader` | read and search | Finding and reading. It reports conclusions with file and line and cannot change anything. |
+| `builder` | read, edit, write, shell, search | A scoped change from a brief or an approved checklist, with its tests. |
+| `reviewer` | read, search, shell; no edit or write | Checking a change or a draft with no knowledge of how it was made. |
+
+None of them can use the web or a connector, or start subagents of its own. For that, Claude still uses a general-purpose one.
+
+This came from measuring the subagents started on one machine over five days. A general-purpose subagent started at about 66,000 tokens (52 runs). Subagents defined with a short tool list started at 5,000 to 11,000 (about 160 runs).
 
 ### The scaffold
 
@@ -263,7 +281,7 @@ my-project/
 
 Needs Claude Code and Node.js. No clone is needed.
 
-1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, five scripts, two skills and the hooks.
+1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, five scripts, three worker types, two skills and the hooks.
 2. Paste it into Claude Code on that machine. Claude merges the rules with what is already there, backs up any file before replacing it, adds the hooks with that machine's own home path, and tests the result.
 3. Start a new session.
 
@@ -318,6 +336,7 @@ Tested on 2026-11-24, on one Windows 11 machine, with Claude Code 2.1.330 and No
 | 15 | The model check also covers a call made by a subagent. | Same session. A subagent started with a model was told to start its own subagent with no model. | Pass. The nested call was blocked with the same message and no subagent ran. |
 | 16 | The context check script reports a large conversation and a resumed one, and stays silent otherwise. | On 2026-11-25, ran the script against 34 made-up transcripts and inputs: sizes on both sides of each threshold, idle times on both sides of 60 minutes, subagent and error entries, missing and invalid times, lines of 3 MB, and missing or invalid input. Also ran it against a real 15 MB transcript. | Pass. All 34 gave the expected line or none, always with exit code 0. A conversation that is both large and idle gets the note about the break. The real transcript took 0.3 seconds and gave 834,000 tokens, which matches that session's measured peak. |
 | 17 | The context check's note reaches Claude in a real session. | On 2026-11-25, installed the hook during a working session of about 300,000 tokens and kept working. | Pass. From the next message on, the note arrived as hook output on every message, with the size rising from 303,000 to 311,000 tokens. The hook was picked up without starting a new session. |
+| 18 | The lean worker types work in a real session and start with far less context. | On 2026-11-25, a new session started one subagent of each type on a small task: find a constant, create and print a file, review a file and run `git status`. Each subagent's first request was then read from its saved transcript. | Pass. All three were offered under their names and did their task. They started at 9,300 (`reader`), 11,100 (`reviewer`) and 11,600 (`builder`) tokens, against 66,000 to 70,000 for the ten general-purpose subagents run the same day. `reviewer` reported a shell and no edit or write tool. |
 
 ### Measured
 
@@ -341,6 +360,8 @@ The digest holds the 20 most recent sessions. On a project with a long history, 
 | 5 | Whether this reduces repeated mistakes over time. | Needs weeks of use. |
 | 6 | The note after a break, in a real session. | It needs a session left idle for over an hour. The logic is covered by row 16 above, and the note uses the same path as the one in row 17. |
 | 7 | Whether Claude acts on the note and on the "Keeping the session small" rules. | These are rules Claude follows, not enforced steps. Needs real use. |
+| 8 | That `reviewer` cannot edit a file by any route. | It reported no edit or write tool (row 18 above), but it has a shell and said other tools could be loaded on demand. It was not asked to try. |
+| 9 | Whether the lean types can do every job a general-purpose subagent did, and whether Claude chooses them. | Needs real use. |
 ### Changed after testing
 
 The tests found defects. All are fixed in the files. The first group was re-tested by rows 5, 8 and 10; the last group was not.
@@ -379,6 +400,9 @@ One thing noticed and left as it is: a dream started inside a session also reads
 | `profile/scripts/session-digest.mjs` | `~/.claude/scripts/` | Shortens saved session transcripts into one digest for a dream. |
 | `profile/scripts/require-agent-model.mjs` | `~/.claude/scripts/` | Blocks a subagent call that names no model. |
 | `profile/scripts/context-check.mjs` | `~/.claude/scripts/` | Adds a note when the conversation is large or is resumed after a break. |
+| `profile/agents/reader.md` | `~/.claude/agents/` | The subagent type for finding and reading. |
+| `profile/agents/builder.md` | `~/.claude/agents/` | The subagent type for making a scoped change. |
+| `profile/agents/reviewer.md` | `~/.claude/agents/` | The subagent type for checking a change. |
 | `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks, the context check that runs when you send a message, and the model check that runs before each subagent call. |
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill. |
 | `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill. |
@@ -389,7 +413,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 
 `profile/` is the source. `SETUP-PROMPT.md` is generated from it.
 
-1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the five scripts and the two skills into `profile/` and show me the diff".
+1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the five scripts, the three files in `~/.claude/agents/` and the two skills into `profile/` and show me the diff".
 2. Run `node build-prompt.mjs` to rebuild the prompt.
 3. Commit both.
 
@@ -398,6 +422,13 @@ Keep secrets out: no tokens, no `settings.json` from a real machine, no memory f
 ## Change log
 
 Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Code to bring a machine up to date.
+
+### 2026-11-25, fourth change
+
+- **Added three lean worker types.** `reader`, `builder` and `reviewer` carry only the tools they need. See [Lean workers](#lean-workers).
+- **Added a rule to prefer them.** The "Subagents" section of `CLAUDE.md` says to use the leanest type that can do the job, and a general-purpose subagent only for the web, a connector, or subagents of its own.
+- **Setup prompt.** It now holds 12 files and writes the three types to `~/.claude/agents/`.
+- **Tested live.** A new session started one subagent of each type. They started at 9,300 to 11,600 tokens, against 66,000 to 70,000 for a general-purpose one. See [Verified](#verified), row 18. A running session was offered the new types only some minutes after they were installed. Still open: see [Not verified](#not-verified), rows 8 and 9.
 
 ### 2026-11-25, third change
 

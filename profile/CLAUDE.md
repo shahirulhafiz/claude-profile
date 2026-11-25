@@ -95,6 +95,8 @@ This covers every kind of worker:
 
 - Start one for work that can run at the same time, or for reading or building that would otherwise fill this conversation.
 - Not for a lookup or a one-step change: each subagent has a start-up cost.
+- Use the leanest agent type that can do the job: `reader` to find and read files (it has no shell); `reviewer` to check a change, or when a read-only job needs git or another command; `builder` when the job changes files or runs commands that write. Use `general-purpose` only when the task needs what those lack (the web, a connector, a skill, or workers of its own): it starts with about six times as much context.
+- The model on the call still follows the Models rule. The model in an agent type's own definition is only a fallback.
 
 # Keeping the session small
 

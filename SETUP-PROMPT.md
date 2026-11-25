@@ -4,7 +4,7 @@ Paste this whole file into Claude Code on the machine you want to set up. It nee
 
 ---
 
-Set up my Claude profile on this machine. Everything you need is in this message: 9 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
+Set up my Claude profile on this machine. Everything you need is in this message: 12 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
 
 The target is my Claude config folder, `~/.claude` (on Windows `%USERPROFILE%\.claude`). Call it `<CLAUDE>` and my home folder `<HOME>`.
 
@@ -21,25 +21,28 @@ Never overwrite an existing file without saving a copy first, as `<name>.bak-YYY
 
 2. **Files 2 to 6, scripts.** Write them to `<CLAUDE>/scripts/` as `project-scaffold.mjs`, `session-digest.mjs`, `session-brief.mjs`, `require-agent-model.mjs` and `context-check.mjs`.
 
-3. **Files 7 and 8, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
+3. **Files 7, 8 and 9, worker types.** Write them to `<CLAUDE>/agents/` as `reader.md`, `builder.md` and `reviewer.md`. Create the folder if it is missing. If a file of the same name is already there and differs, back it up first, write the new one, and tell me which.
 
-4. **File 9, hooks.** Merge it into `<CLAUDE>/settings.json`.
+4. **Files 10 and 11, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
+
+5. **File 12, hooks.** Merge it into `<CLAUDE>/settings.json`.
    - Replace `<HOME>` in all four commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
    - Keep every other key in `settings.json` as it is. Create the file if it is missing.
-   - File 9 has three lists. Add its `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, its `UserPromptSubmit` entry (no matcher, one command) as its own entry in the `UserPromptSubmit` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in all three lists as they are.
+   - File 12 has three lists. Add its `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, its `UserPromptSubmit` entry (no matcher, one command) as its own entry in the `UserPromptSubmit` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in all three lists as they are.
    - If a hook whose command contains `project-scaffold.mjs`, `session-brief.mjs`, `require-agent-model.mjs` or `context-check.mjs` is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
 
 Then check your work and report:
 
 - `<CLAUDE>/settings.json` still parses as JSON.
 - `node --check` passes for each of the five scripts in `<CLAUDE>/scripts/`.
+- Each of the three files in `<CLAUDE>/agents/` starts with a `---` block that has `name`, `description`, `tools` and `model`.
 - In the system temp folder, write a file holding the one line `{"type":"assistant","timestamp":"<the time now, ISO 8601>","message":{"usage":{"input_tokens":300000}}}`. Run `node <CLAUDE>/scripts/context-check.mjs` with `{"transcript_path":"<that file, forward slashes>"}` on standard input. It must exit with code 0 and print one line that starts with `Context check:`. With `300000` changed to `1000` it must print nothing. Delete the file afterwards.
 - Run `node <CLAUDE>/scripts/require-agent-model.mjs` with `{"tool_name":"Agent","tool_input":{"prompt":"x"}}` on standard input. It must exit with code 2 and print a line saying the call names no model. With `"model":"sonnet"` added to `tool_input` it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): `node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
 - Run `node <CLAUDE>/scripts/session-brief.mjs` with `{"cwd":"<that folder, forward slashes>"}` on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 
-Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks and the skills load at session start.
+Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills and the worker types load at session start.
 
 ## File 1: <CLAUDE>/CLAUDE.md
 
@@ -141,6 +144,8 @@ This covers every kind of worker:
 
 - Start one for work that can run at the same time, or for reading or building that would otherwise fill this conversation.
 - Not for a lookup or a one-step change: each subagent has a start-up cost.
+- Use the leanest agent type that can do the job: `reader` to find and read files (it has no shell); `reviewer` to check a change, or when a read-only job needs git or another command; `builder` when the job changes files or runs commands that write. Use `general-purpose` only when the task needs what those lack (the web, a connector, a skill, or workers of its own): it starts with about six times as much context.
+- The model on the call still follows the Models rule. The model in an agent type's own definition is only a fallback.
 
 # Keeping the session small
 
@@ -776,7 +781,64 @@ try {
 if (note) console.log(note);
 ~~~~~~
 
-## File 7: <CLAUDE>/skills/sweep/SKILL.md
+## File 7: <CLAUDE>/agents/reader.md
+
+~~~~~~markdown
+---
+name: reader
+description: Finds and reads code or documents and reports conclusions with file and line. Use it to learn how an area works, to locate something, or to go through more than a few files. It cannot change anything.
+tools: Read, Grep, Glob
+model: haiku
+---
+
+You find and read things for another agent, which will act on your report and has not seen what you read.
+
+- Answer the question you were asked, and only that.
+- Give conclusions, not file dumps. Quote a line only when the exact wording matters.
+- Cite every claim as `path:line`.
+- Say plainly what you looked for and did not find, and what you are unsure of.
+- Change nothing.
+~~~~~~
+
+## File 8: <CLAUDE>/agents/builder.md
+
+~~~~~~markdown
+---
+name: builder
+description: Makes a scoped change to files from a brief or an approved checklist, then runs the tests. Use it to build once the plan is settled. It cannot use the web or connectors, or start workers of its own.
+tools: Read, Edit, Write, Bash, Grep, Glob
+model: sonnet
+---
+
+You carry out a change that another agent has planned. Your brief is all you know about it.
+
+- Stay inside the files and the scope the brief names. If the brief cannot be done as written, stop and say why instead of widening it.
+- Read a file before you change it, and follow the patterns already in it.
+- Run the tests the brief names, or the project's own tests for what you touched. Do not weaken or delete a test to make it pass.
+- Do not commit, push, or change git history.
+- Report what you changed (`path:line`), the test command and its result, and anything you left undone.
+~~~~~~
+
+## File 9: <CLAUDE>/agents/reviewer.md
+
+~~~~~~markdown
+---
+name: reviewer
+description: Checks a finished change or a draft with no knowledge of how it was made, and reports findings by severity with file and line. Use it for a cold review. It can read, search and run commands, but cannot edit files.
+tools: Read, Grep, Glob, Bash
+disallowedTools: Edit, Write
+model: opus
+---
+
+You review work you did not make. You know only what your brief tells you and what you read for yourself.
+
+- Read-only. Use the shell to inspect (for example `git diff`, `git status`) and to run tests, never to change, create or delete files, and never to commit.
+- Check the work against what the brief says it should do. Verify claims by reading the code or running it; do not take a statement on trust.
+- Report material problems only, most serious first, each with `path:line`, the evidence, and a concrete fix.
+- If you find nothing, say so plainly. Do not invent findings, and do not mix praise in with them.
+~~~~~~
+
+## File 10: <CLAUDE>/skills/sweep/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -869,7 +931,7 @@ Apply only the approved numbers.
 Finish with what was archived, updated and cut, what was skipped, and anything that failed.
 ~~~~~~
 
-## File 8: <CLAUDE>/skills/dream/SKILL.md
+## File 11: <CLAUDE>/skills/dream/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -970,7 +1032,7 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 - A project without a `memory/` folder cannot take proposals: say so and offer to set it up with the scaffold script.
 ~~~~~~
 
-## File 9: merge into <CLAUDE>/settings.json
+## File 12: merge into <CLAUDE>/settings.json
 
 ~~~~~~json
 {
