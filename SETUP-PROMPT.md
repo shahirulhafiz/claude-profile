@@ -4,7 +4,7 @@ Paste this whole file into Claude Code on the machine you want to set up. It nee
 
 ---
 
-Set up my Claude profile on this machine. Everything you need is in this message: 12 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
+Set up my Claude profile on this machine. Everything you need is in this message, except one plugin that step 7 downloads: 15 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
 
 The target is my Claude config folder, `~/.claude` (on Windows `%USERPROFILE%\.claude`). Call it `<CLAUDE>` and my home folder `<HOME>`.
 
@@ -25,24 +25,36 @@ Never overwrite an existing file without saving a copy first, as `<name>.bak-YYY
 
 4. **Files 10 and 11, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
 
-5. **File 12, hooks.** Merge it into `<CLAUDE>/settings.json`.
+5. **Files 12, 13 and 14, commands.** Write them to `<CLAUDE>/commands/` as `route.md`, `design.md` and `build.md`. Create the folder if it is missing. If a file of the same name is already there and differs, back it up first, write the new one, and tell me which.
+
+6. **File 15, hooks.** Merge it into `<CLAUDE>/settings.json`.
    - Replace `<HOME>` in all four commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
    - Keep every other key in `settings.json` as it is. Create the file if it is missing.
-   - File 12 has three lists. Add its `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, its `UserPromptSubmit` entry (no matcher, one command) as its own entry in the `UserPromptSubmit` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in all three lists as they are.
+   - File 15 has three lists. Add its `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, its `UserPromptSubmit` entry (no matcher, one command) as its own entry in the `UserPromptSubmit` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in all three lists as they are.
    - If a hook whose command contains `project-scaffold.mjs`, `session-brief.mjs`, `require-agent-model.mjs` or `context-check.mjs` is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
+
+7. **The Elephant-Goldfish plugin.** The rules in File 1 and the three commands need the plugin `egm@egm`. It is not part of this message: it is downloaded from the GitHub repository `google/elephant-goldfish-model`. Run only what is missing, in a shell, and show me what each command printed.
+   - Run `claude plugin list`. If it shows `egm@egm` as enabled, there is nothing to do.
+   - If it shows `egm@egm` but not as enabled, run `claude plugin enable egm@egm`.
+   - Otherwise run `claude plugin marketplace list`. If no marketplace named `egm` is listed, run `claude plugin marketplace add google/elephant-goldfish-model`. Then run `claude plugin install egm@egm`.
+   - If the `claude` command is not found, or the add, the install or the enable fails, do not try again. Go on to the checks, and in your report say the plugin is not installed. Give me the command that failed, to run myself: if the enable failed, that is `claude plugin enable egm@egm`. If the add or the install failed, or `claude` was not found, give me both install commands (`claude plugin marketplace add google/elephant-goldfish-model`, then `claude plugin install egm@egm`) and say that they need git and access to github.com. In either case, say that every request for a change will stop at the route until the plugin is installed.
 
 Then check your work and report:
 
 - `<CLAUDE>/settings.json` still parses as JSON.
 - `node --check` passes for each of the five scripts in `<CLAUDE>/scripts/`.
 - Each of the three files in `<CLAUDE>/agents/` starts with a `---` block that has `name`, `description`, `tools` and `model`.
+- Each of the three files in `<CLAUDE>/commands/` starts with a `---` block that has `description`.
+- The plugin, part 1: `claude plugin list` shows `egm@egm` as enabled. Report its version and status. The folder in part 2 alone proves nothing, because it can be left over from an uninstall.
+- The plugin, part 2: `<CLAUDE>/plugins/cache/egm/egm/` has a version folder (take the highest), and its `skills/` folder holds `egm-lite`, `egm-brainstorm`, `egm-draft`, `egm-review`, `egm-resolve`, `egm-drift-report` and `egm-bootstrap`. Name any that is missing.
+- If step 7 ended with the plugin not installed, report both plugin checks as skipped (plugin not installed), not as failed, and do not try to repair them.
 - In the system temp folder, write a file holding the one line `{"type":"assistant","timestamp":"<the time now, ISO 8601>","message":{"usage":{"input_tokens":300000}}}`. Run `node <CLAUDE>/scripts/context-check.mjs` with `{"transcript_path":"<that file, forward slashes>"}` on standard input. It must exit with code 0 and print one line that starts with `Context check:`. With `300000` changed to `1000` it must print nothing. Delete the file afterwards.
 - Run `node <CLAUDE>/scripts/require-agent-model.mjs` with `{"tool_name":"Agent","tool_input":{"prompt":"x"}}` on standard input. It must exit with code 2 and print a line saying the call names no model. With `"model":"sonnet"` added to `tool_input` it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): `node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
 - Run `node <CLAUDE>/scripts/session-brief.mjs` with `{"cwd":"<that folder, forward slashes>"}` on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 
-Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills and the worker types load at session start.
+Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills, the commands, the worker types and the plugin load at session start.
 
 ## File 1: <CLAUDE>/CLAUDE.md
 
@@ -165,6 +177,29 @@ Please avoid stopping while you still owe work the user asked for. Be persistent
 # Communicating clearly
 
 Write for an intelligent but low-context reader. The person reading has not seen your tool calls, your reasoning or the files you opened, and may be switching in from other work.
+
+# Making changes: route first (Elephant-Goldfish)
+
+This is my default for every project.
+
+- When I ask in plain text for a change to a project's code (a feature, a fix, a refactor, a UI change), a design, or a design review, route it before editing: call the `Skill` tool with skill `route` and my request as the args, then follow the route it picks. I do not type slash commands; do not ask me to.
+- A question, a lookup or a one-line edit needs no route.
+- My plain-text request is my standing instruction to run the Elephant-Goldfish (EGM) steps its route lists. The `Skill` tool refuses `/egm:*` skills, so run a step by reading that skill's `SKILL.md` in the plugin folder and following it, as the `route` command describes.
+- Stop at every approval point and tell me in plain words what comes next. Nothing is built from a spec or checklist I have not approved.
+- The session that drafts a spec does not review it. Reviews run in fresh subagents.
+- Every EGM agent inherits the session's model, so name a model on every EGM call: sonnet for `egm:egm-style`, `egm:egm-structural` and `egm:egm-comprehension`; opus for `egm:egm-synthesizer`, `egm:egm-bootstrap-orchestrator` and the other reviewers. When you start `egm:egm-synthesizer` or `egm:egm-bootstrap-orchestrator`, tell it in its brief which model to give each worker it starts: the model from this list for a reviewer, sonnet for any other worker.
+- Review panel. Where an EGM skill lists its reviewers, use this smaller panel instead. It comes from an audit of two reviewed designs on 2026-11-25: the reviewers left out raised nothing the others did not.
+  - Brainstorm review: `egm:egm-zoom-out`, `egm:egm-inventive-catalyst`, `egm:egm-codebase-details`.
+  - Stage 5 (zoom out): `egm:egm-zoom-out`, `egm:egm-inventive-catalyst`.
+  - Stage 6 (comprehension): `egm:egm-comprehension`, called directly.
+  - Stage 7 (critic): `egm:egm-design`, `egm:egm-style`. No structural reviewer. Check yourself that the draft has a Risks section and that each rejected option says who rejected it.
+  - Stage 8 (second zoom out): skip it. Go from stage 7 to stage 9.
+  - Stage 9 (readiness): `egm:egm-implementation-readiness`, `egm:egm-codebase-details`. No second style run.
+  - A re-audit uses that stage's reviewers from this list, without style.
+  - One synthesizer per round. For a single reviewer, call it directly.
+  - If I ask for the full panel, use the skill's own list.
+- EGM artifact directory: `docs/designs`, unless the project names another.
+- If a project's own instructions name a different workflow, follow the project.
 ~~~~~~
 
 ## File 2: <CLAUDE>/scripts/project-scaffold.mjs
@@ -1032,7 +1067,101 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 - A project without a `memory/` folder cannot take proposals: say so and offer to set it up with the scaffold script.
 ~~~~~~
 
-## File 12: merge into <CLAUDE>/settings.json
+## File 12: <CLAUDE>/commands/route.md
+
+~~~~~~markdown
+---
+description: Router for the orchestrator. Start this yourself, without being asked, whenever the user asks in plain text for any change to a project's code (a feature, fix, refactor, UI change), a design, a design review, or a check that code matches its designs. It classifies the request and sends it down the right Elephant-Goldfish (EGM) route.
+argument-hint: <the change or question, in your own words>
+---
+
+You are the orchestrator. Route this request; do not start editing code yourself.
+
+Request: $ARGUMENTS
+
+## 1. Pick exactly one route
+
+Take the first row that fits. Say which route you picked and why, in one line.
+
+| The request is… | Route | Run |
+|---|---|---|
+| A question, a lookup, or a one-line edit | None | Answer or do it directly |
+| A new feature, a change in behaviour, or an idea whose shape is still open | Full design | `/design $ARGUMENTS`, then `/build` once the spec is approved |
+| A small, well-defined change (a fix, a tweak, a rename, a refactor) with no design decision in it | Lite | `/egm:egm-lite`, from start to finish |
+| An existing design doc that needs checking | Review | `/egm:egm-review <path to the doc>` |
+| Reviewer findings on a draft that need settling | Resolve | `/egm:egm-resolve` |
+| A doubt whether the code still matches its designs | Drift | `/egm:egm-drift-report <designs folder>` |
+| A folder with no READMEs to design against | Bootstrap | `/egm:egm-bootstrap <path>` |
+| An approved spec that is ready to implement | Build | `/build <path to the spec>` |
+
+If two rows fit and the choice changes what gets built, ask the user which one. Otherwise pick and carry on.
+
+**Lite is self-contained.** `egm-lite` has its own plan, cold review, implementation and diff review. Follow it through; do not hand its result to `/build`.
+
+## 2. Rules for every route
+
+- **Elephant and goldfish stay apart.** The session that drafts a spec or checklist holds the context (elephant). Reviews run in fresh subagents that see only the draft and the files it cites (goldfish). Never review a draft in the context that wrote it.
+- **The user approves before anything is built.** No route goes from a draft or checklist to implementation without the user's explicit approval of it.
+- **How to run an `/egm:*` step.** The `Skill` tool refuses EGM skills, so do not call it for them. Open that skill's file and follow it in this thread: `~/.claude/plugins/cache/egm/egm/<version>/skills/<skill name>/SKILL.md`. To find the version, list `~/.claude/plugins/cache/egm/egm/` and take the highest number. This is the method the plugin's own `docs/claude.md` gives.
+- **The user does not type commands.** They write in plain text and you work out the route. Their standing instruction, in their global `CLAUDE.md`, is that a plain-text request for a change is their request to run whichever EGM steps the chosen route lists. Do not ask them to type `/route`, `/design`, `/build` or any `/egm:*` command. The only limit: never start a route for work nobody asked for.
+- **Every stop in an EGM skill is real.** Where a skill halts for a command such as `checklist`, `goldfish`, `exec` or `review`, stop and tell the user in plain words what the next step is and what you recommend. Take their plain-text answer ("go on", "review it first", "build it") as the matching command. Never skip a stop or answer it yourself.
+- **Protect work in progress.** Before the first edit, note the starting commit and any uncommitted changes. Do not stash, reset, restore, clean or commit the user's existing changes.
+- **Project rules win.** If the project's own `CLAUDE.md` or docs name a different workflow, checks, agents or designs folder, follow the project.
+- **EGM must be installed.** If the skills folder is missing, stop and tell the user to install the plugin; do not make the steps up:
+  `claude plugin marketplace add google/elephant-goldfish-model` then `claude plugin install egm@egm`.
+- **Artifacts.** EGM artifact directory: `docs/designs`, unless the project names another. Approved specs are kept there.
+~~~~~~
+
+## File 13: <CLAUDE>/commands/design.md
+
+~~~~~~markdown
+---
+description: Full design route. An elephant drafts the spec, goldfish reviewers check it cold, and the user approves it before any code is written.
+argument-hint: <the feature or change to design>
+---
+
+Run the Elephant-Goldfish design loop for: $ARGUMENTS
+
+EGM artifact directory: `docs/designs`, unless the project names another.
+
+Work through these in order. Each step is one of the `egm` plugin's skills. The `Skill` tool refuses them, so for each step open `~/.claude/plugins/cache/egm/egm/<version>/skills/<skill name>/SKILL.md` (highest version folder) and follow it in this thread. If that folder is missing, stop and say the plugin is not installed.
+
+1. **Brief** — `egm-brainstorm`. Settle the goal, the constraints and the open trade-offs with the user. It writes `concepts_brief.md`.
+2. **Draft** — `egm-draft`. You are the elephant: use everything you know about this project (its README, `CLAUDE.md`, existing plans and designs, the code and its tests) to write `design_draft.md`.
+3. **Review** — `egm-review` on the draft. Goldfish reviewers read it in fresh subagents with none of this conversation. Use the review panel from the Elephant-Goldfish section of the global `CLAUDE.md`, not the skill's full list; the same goes for the brainstorm review in step 1. If fresh subagents are not available, stop here rather than reviewing in this context.
+4. **Resolve** — `egm-resolve`. Settle each finding: fix the draft, or record why it stands. Put every architectural trade-off to the user; do not decide those yourself. Repeat steps 3 and 4 until no blocking finding is left.
+5. **Approval gate** — show the user the final spec and ask for approval. Stop until they answer.
+6. **Hand over** — once approved, save the spec in the artifact directory and continue with `/build <path to the spec>`.
+
+Where a skill halts for a typed command, stop, say in plain words what comes next, and take the user's plain-text answer as that command.
+
+Write no implementation code in this command.
+~~~~~~
+
+## File 14: <CLAUDE>/commands/build.md
+
+~~~~~~markdown
+---
+description: Build route. Implements a spec the user has approved, using worker agents, then tests and reviews it.
+argument-hint: <path to the approved spec>
+---
+
+Implement: $ARGUMENTS
+
+Before anything else, confirm the user approved this spec. If you cannot tell, ask; do not build from an unapproved draft.
+
+Before the first edit, note the starting commit and any uncommitted changes. Leave the user's existing changes as they are: no stash, reset, restore, clean or commit of them.
+
+You are the orchestrator: you brief the workers and check their results, they do the work. Give each worker the spec path, the files or area it owns, the constraints, and what done looks like.
+
+1. **Implement** — use the project's own developer agents in `.claude/agents/` when it has ones that fit the work; otherwise use general workers. Run workers in parallel only when they touch different files. For a change of a file or two, make it yourself.
+2. **Test** — add or update tests for the change, following the project's test conventions (a `test-author` agent if the project has one). Then run the project's own checks: the ones its README, `CLAUDE.md` or package scripts name (tests, type check, lint, build). Report their real output.
+3. **Review** — a fresh reviewer (the project's `code-reviewer` agent if it has one) judges the diff against the spec, without this conversation. On REVISE, fix and review again, at most 3 rounds; after that, stop and report what is still open.
+4. **Drift check** — `egm-drift-report` on the designs folder, to confirm the code matches the spec. The `Skill` tool refuses EGM skills: open `~/.claude/plugins/cache/egm/egm/<version>/skills/egm-drift-report/SKILL.md` (highest version folder) and follow it. If the build had to depart from the spec, update the spec and say so.
+5. **Report** — what changed, the real output of the checks, and anything not done.
+~~~~~~
+
+## File 15: merge into <CLAUDE>/settings.json
 
 ~~~~~~json
 {

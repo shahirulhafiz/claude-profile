@@ -116,3 +116,26 @@ Please avoid stopping while you still owe work the user asked for. Be persistent
 # Communicating clearly
 
 Write for an intelligent but low-context reader. The person reading has not seen your tool calls, your reasoning or the files you opened, and may be switching in from other work.
+
+# Making changes: route first (Elephant-Goldfish)
+
+This is my default for every project.
+
+- When I ask in plain text for a change to a project's code (a feature, a fix, a refactor, a UI change), a design, or a design review, route it before editing: call the `Skill` tool with skill `route` and my request as the args, then follow the route it picks. I do not type slash commands; do not ask me to.
+- A question, a lookup or a one-line edit needs no route.
+- My plain-text request is my standing instruction to run the Elephant-Goldfish (EGM) steps its route lists. The `Skill` tool refuses `/egm:*` skills, so run a step by reading that skill's `SKILL.md` in the plugin folder and following it, as the `route` command describes.
+- Stop at every approval point and tell me in plain words what comes next. Nothing is built from a spec or checklist I have not approved.
+- The session that drafts a spec does not review it. Reviews run in fresh subagents.
+- Every EGM agent inherits the session's model, so name a model on every EGM call: sonnet for `egm:egm-style`, `egm:egm-structural` and `egm:egm-comprehension`; opus for `egm:egm-synthesizer`, `egm:egm-bootstrap-orchestrator` and the other reviewers. When you start `egm:egm-synthesizer` or `egm:egm-bootstrap-orchestrator`, tell it in its brief which model to give each worker it starts: the model from this list for a reviewer, sonnet for any other worker.
+- Review panel. Where an EGM skill lists its reviewers, use this smaller panel instead. It comes from an audit of two reviewed designs on 2026-11-25: the reviewers left out raised nothing the others did not.
+  - Brainstorm review: `egm:egm-zoom-out`, `egm:egm-inventive-catalyst`, `egm:egm-codebase-details`.
+  - Stage 5 (zoom out): `egm:egm-zoom-out`, `egm:egm-inventive-catalyst`.
+  - Stage 6 (comprehension): `egm:egm-comprehension`, called directly.
+  - Stage 7 (critic): `egm:egm-design`, `egm:egm-style`. No structural reviewer. Check yourself that the draft has a Risks section and that each rejected option says who rejected it.
+  - Stage 8 (second zoom out): skip it. Go from stage 7 to stage 9.
+  - Stage 9 (readiness): `egm:egm-implementation-readiness`, `egm:egm-codebase-details`. No second style run.
+  - A re-audit uses that stage's reviewers from this list, without style.
+  - One synthesizer per round. For a single reviewer, call it directly.
+  - If I ask for the full panel, use the skill's own list.
+- EGM artifact directory: `docs/designs`, unless the project names another.
+- If a project's own instructions name a different workflow, follow the project.

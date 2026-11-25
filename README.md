@@ -33,6 +33,7 @@ It solves three problems:
 | Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before every subagent call |
 | Context check | Adds a note for Claude when the conversation has grown large, or is picked up again after a break, so it suggests a new session at the next approval point. | Automatically, each time you send a message |
 | Lean worker types | Three subagent types, `reader`, `builder` and `reviewer`, that carry only the tools they need, so each starts with far less context than a general-purpose one. | Whenever Claude starts a subagent of that type |
+| Routed changes | A request for a change is first sorted into a route: a full design, a small change with a checklist, or a build from an approved spec. Each route has a review by fresh subagents and stops for your approval before anything is built. Needs the Elephant-Goldfish plugin, which the setup installs. | Whenever you ask Claude to change a project |
 | Memory in Open Knowledge Format (OKF) | Every memory records where it came from, who confirmed it, its status and when to check it again. | Whenever Claude saves a memory |
 | `/dream` | Reviews past sessions in the background and proposes memory changes, with the sessions as evidence. | Automatically after 3 new sessions and 24 hours; you approve with `/dream` |
 | `/sweep` | Finds outdated TODOs, plans, rules and memories, proves each against the code, and proposes what to archive, update or cut. | When you type `/sweep` |
@@ -68,6 +69,7 @@ The global `CLAUDE.md` loads in every session. The main rules are:
 - **Ticket status.** Every ticket carries `Status: not started`, `Status: in progress` or `Status: done`, checked against the app.
 - **Workers get a named model.** Claude plans the work itself and gives tasks that can run side by side to subagents: sonnet for simple tasks, opus for harder ones, haiku for file search and logs. Every subagent call names its model.
 - **The leanest worker that can do the job.** `reader` to find and read files, `reviewer` to check a change or run a read-only command, `builder` to change files. See [Lean workers](#lean-workers).
+- **Route before changing.** A plain-text request for a change goes through a route first, and nothing is built from a spec or checklist you have not approved. See [Routing changes](#routing-changes).
 - **Sessions stay small.** One session per ticket or phase, with subagents doing the heavy reading and the building. See [Keeping the session small](#keeping-the-session-small).
 
 ### The model check
@@ -107,6 +109,28 @@ The profile adds three types that are given only what they need:
 None of them can use the web or a connector, or start subagents of its own. For that, Claude still uses a general-purpose one.
 
 This came from measuring the subagents started on one machine over five days. A general-purpose subagent started at about 66,000 tokens (52 runs). Subagents defined with a short tool list started at 5,000 to 11,000 (about 160 runs).
+
+### Routing changes
+
+When you ask in plain text for a change to a project, Claude does not start editing. It first sorts the request into a route. A question, a lookup or a one-line edit needs no route.
+
+| Route | For | What happens |
+| --- | --- | --- |
+| Full design | A new feature, a change in behaviour, an idea whose shape is still open | Claude drafts a spec, fresh subagents review it, you approve it, then it is built. |
+| Lite | A small, well-defined change | Claude writes a checklist, you approve it (with or without a review first), it is built, and a fresh subagent reviews the result. |
+| Build | A spec you have already approved | Subagents build it, the project's checks run, and a fresh reviewer judges the result against the spec. |
+
+The session that writes a spec or checklist never reviews it. Reviews run in fresh subagents that see only the draft and the files it names.
+
+Three parts make this work:
+
+- **The rule.** The last section of `CLAUDE.md`, "Making changes: route first". It also names the model for each reviewer and a smaller review panel.
+- **Three commands.** `route` sorts the request; `design` and `build` run the full design route and the build route. Claude starts them itself; you do not type them.
+- **The plugin.** The steps of each route come from the Elephant-Goldfish (EGM) plugin, `egm@egm`, from the GitHub repository `google/elephant-goldfish-model`. It is not stored in this repository. The setup prompt downloads and installs it.
+
+The smaller panel uses fewer reviewers than the plugin's own lists. It comes from an audit of two reviewed designs: the reviewers left out raised nothing the others did not. The evidence is in [2026-11-25-review-panel-checklist.md](docs/designs/2026-11-25-review-panel-checklist.md).
+
+Without the plugin, the route stops every request for a change and says the plugin is not installed. See [Set up a machine](#set-up-a-machine).
 
 ### The scaffold
 
@@ -252,7 +276,7 @@ After your yes, Claude stops making that mistake in this project.
 
 ### 6. A new machine or a new teammate
 
-Paste one prompt (see [Set up a machine](#set-up-a-machine)) and the machine has the same rules, hooks and skills. Because project memories live in the project's `memory/` folder, a `git pull` brings the project's lessons too.
+Paste one prompt (see [Set up a machine](#set-up-a-machine)) and the machine has the same rules, hooks, skills, commands and plugin. Because project memories live in the project's `memory/` folder, a `git pull` brings the project's lessons too.
 
 ## What a project looks like
 
@@ -279,11 +303,21 @@ my-project/
 
 ## Set up a machine
 
-Needs Claude Code and Node.js. No clone is needed.
+Needs Claude Code and Node.js. The plugin also needs access to github.com, and probably git. No clone of this repository is needed.
 
-1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, five scripts, three worker types, two skills and the hooks.
-2. Paste it into Claude Code on that machine. Claude merges the rules with what is already there, backs up any file before replacing it, adds the hooks with that machine's own home path, and tests the result.
+1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the profile: the rules, five scripts, three worker types, two skills, three commands and the hooks.
+2. Paste it into Claude Code on that machine. Claude merges the rules with what is already there, backs up any file before replacing it, adds the hooks with that machine's own home path, installs the Elephant-Goldfish plugin from GitHub if it is missing, and tests the result.
 3. Start a new session.
+
+If the plugin cannot be installed, the rest of the setup still completes, and the report gives you two commands to run yourself:
+
+```powershell
+claude plugin marketplace add google/elephant-goldfish-model
+```
+
+```powershell
+claude plugin install egm@egm
+```
 
 Paste the latest version of the same prompt again to update a machine.
 
@@ -362,6 +396,8 @@ The digest holds the 20 most recent sessions. On a project with a long history, 
 | 7 | Whether Claude acts on the note and on the "Keeping the session small" rules. | These are rules Claude follows, not enforced steps. Needs real use. |
 | 8 | That `reviewer` cannot edit a file by any route. | It reported no edit or write tool (row 18 above), but it has a shell and said other tools could be loaded on demand. It was not asked to try. |
 | 9 | Whether the lean types can do every job a general-purpose subagent did, and whether Claude chooses them. | Needs real use. |
+| 10 | That the setup prompt installs the Elephant-Goldfish plugin by itself, and that the install switches the plugin on in the settings. | Checked only that the commands exist and are spelled right on the machine that already has the plugin. Whether they need git is not confirmed either. Needs a run on a machine without the plugin. |
+| 11 | On a machine set up from the prompt: a request for a change starts the route, and the eight reviewers the panel names are available. | Needs a new session on that machine. |
 ### Changed after testing
 
 The tests found defects. All are fixed in the files. The first group was re-tested by rows 5, 8 and 10; the last group was not.
@@ -387,6 +423,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 - **The model check enforces that a model is named, not which one.** A subagent started without a model runs on the session's model, and many plugin agents are set up that way. The hook blocks such a call, and its message tells Claude to repeat it with a model; choosing sonnet, opus or haiku is still the rule in `CLAUDE.md`. Forks are exempt, because they always run on the session's model.
 - **The context check only advises.** It adds a note; it cannot start a new session or shorten the current one, and it never blocks a message. The size comes from the last reply, so it is one turn behind. The note repeats on every message while the conversation is over the size, and the rule tells Claude to mention it once.
 - **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them (observed on this machine). Files in a project's `memory/` folder are strict OKF.
+- **The setup downloads one thing.** Everything else is inside the setup prompt. The Elephant-Goldfish plugin is fetched from GitHub at setup time, at its latest version, so two machines set up on different days can hold different versions. The setup check names any of the seven skills the commands use that is missing.
 - **Sessions started in a different folder are not part of a project's dream.** Only the project root and its Claude worktrees are.
 
 ## Files in this repository
@@ -406,14 +443,19 @@ One thing noticed and left as it is: a dream started inside a session also reads
 | `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks, the context check that runs when you send a message, and the model check that runs before each subagent call. |
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill. |
 | `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill. |
+| `profile/commands/route.md` | `~/.claude/commands/` | Sorts a request for a change into a route. |
+| `profile/commands/design.md` | `~/.claude/commands/` | The full design route: spec, review, approval. |
+| `profile/commands/build.md` | `~/.claude/commands/` | The build route: builds an approved spec, tests and reviews it. |
 | `build-prompt.mjs` | stays here | Rebuilds `SETUP-PROMPT.md` from `profile/`. |
 | `docs/designs/` | stays here | The approved checklist for each change, with what its reviews found. The newest is `egm_lite_checklist.md`; earlier ones carry a date in their name. |
+
+The Elephant-Goldfish plugin is not in this table: the setup prompt installs it from GitHub, and no copy is kept here.
 
 ## Change the profile
 
 `profile/` is the source. `SETUP-PROMPT.md` is generated from it.
 
-1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the five scripts, the three files in `~/.claude/agents/` and the two skills into `profile/` and show me the diff".
+1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the five scripts, the three files in `~/.claude/agents/`, the two skills and the three commands in `~/.claude/commands/` into `profile/` and show me the diff". The plugin is not copied: to change which plugin the setup installs, edit the plugin step in `build-prompt.mjs`.
 2. Run `node build-prompt.mjs` to rebuild the prompt.
 3. Commit both.
 
@@ -422,6 +464,13 @@ Keep secrets out: no tokens, no `settings.json` from a real machine, no memory f
 ## Change log
 
 Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Code to bring a machine up to date.
+
+### 2026-11-25, fifth change
+
+- **Added the Elephant-Goldfish setup to the profile.** The "route first" rule with the smaller review panel is now the last section of `CLAUDE.md`, and the `route`, `design` and `build` commands are in `profile/commands/`. See [Routing changes](#routing-changes).
+- **This reverses the third change below**, which kept the panel out of the profile. A second machine set up from this repository had neither the plugin nor the rule.
+- **Setup prompt.** It now holds 15 files, writes the three commands to `~/.claude/commands/`, and installs the plugin `egm@egm` from GitHub if it is missing. If the install fails, the setup finishes the rest and reports the commands to run by hand.
+- **Not yet proven.** The plugin install has not been run on a machine without the plugin. See [Not verified](#not-verified), rows 10 and 11.
 
 ### 2026-11-25, fourth change
 
@@ -432,7 +481,7 @@ Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Co
 
 ### 2026-11-25, third change
 
-- **Recorded a smaller review panel.** An audit of two reviewed designs showed which design reviewers repeated the others. The checklist in `docs/designs/egm_lite_checklist.md` holds the evidence and the reduced panel.
+- **Recorded a smaller review panel.** An audit of two reviewed designs showed which design reviewers repeated the others. The checklist in `docs/designs/2026-11-25-review-panel-checklist.md` holds the evidence and the reduced panel.
 - **Not part of the profile.** The panel belongs to a separate design-review plugin, so it was applied on one machine only. The setup prompt does not install it, and nothing in `profile/` changed.
 - **Not yet proven.** Whether a session follows the smaller panel, and whether review quality holds, will only show on real design reviews.
 

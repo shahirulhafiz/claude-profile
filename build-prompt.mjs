@@ -21,6 +21,9 @@ const parts = [
   { src: 'profile/agents/reviewer.md', dest: '<CLAUDE>/agents/reviewer.md', lang: 'markdown' },
   { src: 'profile/skills/sweep/SKILL.md', dest: '<CLAUDE>/skills/sweep/SKILL.md', lang: 'markdown' },
   { src: 'profile/skills/dream/SKILL.md', dest: '<CLAUDE>/skills/dream/SKILL.md', lang: 'markdown' },
+  { src: 'profile/commands/route.md', dest: '<CLAUDE>/commands/route.md', lang: 'markdown' },
+  { src: 'profile/commands/design.md', dest: '<CLAUDE>/commands/design.md', lang: 'markdown' },
+  { src: 'profile/commands/build.md', dest: '<CLAUDE>/commands/build.md', lang: 'markdown' },
   { src: 'profile/settings.hooks.json', dest: 'merge into <CLAUDE>/settings.json', lang: 'json' },
 ];
 
@@ -37,7 +40,7 @@ Paste this whole file into Claude Code on the machine you want to set up. It nee
 
 ---
 
-Set up my Claude profile on this machine. Everything you need is in this message: ${parts.length} files, each inside a block fenced with six tildes (@@${FENCE}@@). The opening fence line also carries a language word (@@markdown@@, @@javascript@@ or @@json@@), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
+Set up my Claude profile on this machine. Everything you need is in this message, except one plugin that step 7 downloads: ${parts.length} files, each inside a block fenced with six tildes (@@${FENCE}@@). The opening fence line also carries a language word (@@markdown@@, @@javascript@@ or @@json@@), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
 
 The target is my Claude config folder, @@~/.claude@@ (on Windows @@%USERPROFILE%\\.claude@@). Call it @@<CLAUDE>@@ and my home folder @@<HOME>@@.
 
@@ -58,24 +61,36 @@ Never overwrite an existing file without saving a copy first, as @@<name>.bak-YY
 
 4. **Files 10 and 11, skills.** Write them to @@<CLAUDE>/skills/sweep/SKILL.md@@ and @@<CLAUDE>/skills/dream/SKILL.md@@.
 
-5. **File 12, hooks.** Merge it into @@<CLAUDE>/settings.json@@.
+5. **Files 12, 13 and 14, commands.** Write them to @@<CLAUDE>/commands/@@ as @@route.md@@, @@design.md@@ and @@build.md@@. Create the folder if it is missing. If a file of the same name is already there and differs, back it up first, write the new one, and tell me which.
+
+6. **File 15, hooks.** Merge it into @@<CLAUDE>/settings.json@@.
    - Replace @@<HOME>@@ in all four commands with this machine's real home folder, written with forward slashes (for example @@C:/Users/name@@ or @@/Users/name@@).
    - Keep every other key in @@settings.json@@ as it is. Create the file if it is missing.
-   - File 12 has three lists. Add its @@SessionStart@@ entry (matcher @@startup@@ with its two commands) as its own entry in the @@SessionStart@@ list, its @@UserPromptSubmit@@ entry (no matcher, one command) as its own entry in the @@UserPromptSubmit@@ list, and its @@PreToolUse@@ entry (matcher @@Agent|Task@@ with its one command) as its own entry in the @@PreToolUse@@ list. Leave the other entries in all three lists as they are.
+   - File 15 has three lists. Add its @@SessionStart@@ entry (matcher @@startup@@ with its two commands) as its own entry in the @@SessionStart@@ list, its @@UserPromptSubmit@@ entry (no matcher, one command) as its own entry in the @@UserPromptSubmit@@ list, and its @@PreToolUse@@ entry (matcher @@Agent|Task@@ with its one command) as its own entry in the @@PreToolUse@@ list. Leave the other entries in all three lists as they are.
    - If a hook whose command contains @@project-scaffold.mjs@@, @@session-brief.mjs@@, @@require-agent-model.mjs@@ or @@context-check.mjs@@ is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
+
+7. **The Elephant-Goldfish plugin.** The rules in File 1 and the three commands need the plugin @@egm@egm@@. It is not part of this message: it is downloaded from the GitHub repository @@google/elephant-goldfish-model@@. Run only what is missing, in a shell, and show me what each command printed.
+   - Run @@claude plugin list@@. If it shows @@egm@egm@@ as enabled, there is nothing to do.
+   - If it shows @@egm@egm@@ but not as enabled, run @@claude plugin enable egm@egm@@.
+   - Otherwise run @@claude plugin marketplace list@@. If no marketplace named @@egm@@ is listed, run @@claude plugin marketplace add google/elephant-goldfish-model@@. Then run @@claude plugin install egm@egm@@.
+   - If the @@claude@@ command is not found, or the add, the install or the enable fails, do not try again. Go on to the checks, and in your report say the plugin is not installed. Give me the command that failed, to run myself: if the enable failed, that is @@claude plugin enable egm@egm@@. If the add or the install failed, or @@claude@@ was not found, give me both install commands (@@claude plugin marketplace add google/elephant-goldfish-model@@, then @@claude plugin install egm@egm@@) and say that they need git and access to github.com. In either case, say that every request for a change will stop at the route until the plugin is installed.
 
 Then check your work and report:
 
 - @@<CLAUDE>/settings.json@@ still parses as JSON.
 - @@node --check@@ passes for each of the five scripts in @@<CLAUDE>/scripts/@@.
 - Each of the three files in @@<CLAUDE>/agents/@@ starts with a @@---@@ block that has @@name@@, @@description@@, @@tools@@ and @@model@@.
+- Each of the three files in @@<CLAUDE>/commands/@@ starts with a @@---@@ block that has @@description@@.
+- The plugin, part 1: @@claude plugin list@@ shows @@egm@egm@@ as enabled. Report its version and status. The folder in part 2 alone proves nothing, because it can be left over from an uninstall.
+- The plugin, part 2: @@<CLAUDE>/plugins/cache/egm/egm/@@ has a version folder (take the highest), and its @@skills/@@ folder holds @@egm-lite@@, @@egm-brainstorm@@, @@egm-draft@@, @@egm-review@@, @@egm-resolve@@, @@egm-drift-report@@ and @@egm-bootstrap@@. Name any that is missing.
+- If step 7 ended with the plugin not installed, report both plugin checks as skipped (plugin not installed), not as failed, and do not try to repair them.
 - In the system temp folder, write a file holding the one line @@{"type":"assistant","timestamp":"<the time now, ISO 8601>","message":{"usage":{"input_tokens":300000}}}@@. Run @@node <CLAUDE>/scripts/context-check.mjs@@ with @@{"transcript_path":"<that file, forward slashes>"}@@ on standard input. It must exit with code 0 and print one line that starts with @@Context check:@@. With @@300000@@ changed to @@1000@@ it must print nothing. Delete the file afterwards.
 - Run @@node <CLAUDE>/scripts/require-agent-model.mjs@@ with @@{"tool_name":"Agent","tool_input":{"prompt":"x"}}@@ on standard input. It must exit with code 2 and print a line saying the call names no model. With @@"model":"sonnet"@@ added to @@tool_input@@ it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): @@node <CLAUDE>/scripts/project-scaffold.mjs <that folder>@@. It must create @@CLAUDE.md@@, @@specs/prd.md@@, @@specs/tickets/README.md@@, @@memory/index.md@@, @@memory/log.md@@, @@memory/README.md@@, @@archive/INDEX.md@@ and @@.claude/settings.json@@.
 - Run @@node <CLAUDE>/scripts/session-brief.mjs@@ with @@{"cwd":"<that folder, forward slashes>"}@@ on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
 
-Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills and the worker types load at session start.
+Do not scaffold my existing projects on this machine, and do not commit or push anything. Tell me to start a new session afterwards, because the hooks, the skills, the commands, the worker types and the plugin load at session start.
 `.replaceAll('@@', '`');
 
 const prompt = `${instructions}\n${blocks}\n`;
