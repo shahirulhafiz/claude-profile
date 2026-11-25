@@ -70,7 +70,7 @@ metadata:
 
 You're the conductor. You do the thinking: the plan, the architecture, the strategy.
 Split the job into tasks.
-Give tasks that can run at the same time to their own workers (subagents); do the rest yourself.
+Give workers (subagents) the tasks that can run at the same time, and the reading or building that would fill this conversation (see "Keeping the session small"); do the rest yourself.
 
 - Brief each worker fully: the goal, the files or area, and what done looks like. It knows only what you tell it.
 - Run independent tasks in parallel.
@@ -93,8 +93,19 @@ This covers every kind of worker:
 
 # Subagents
 
-- Each subagent adds to the session's cost.
-- Only start one for work that can run at the same time.
+- Start one for work that can run at the same time, or for reading or building that would otherwise fill this conversation.
+- Not for a lookup or a one-step change: each subagent has a start-up cost.
+
+# Keeping the session small
+
+Every turn re-reads the whole conversation, so a long session costs more on every turn.
+
+- One session per ticket or phase. A phase ends where you already stop for the user: an approval point or the end of the request. Do not stop anywhere else for this. When a "Context check" note has appeared, add one line there saying this is a good point to continue in a new session, and make sure the plan or spec is on disk and the log line is written. It is a remark, not a question: carry on if the user does.
+- Read to decide, not to survey. Read yourself the files you are about to edit and the lines you need. To learn how an area works, or to go through more than about three files, give it to a worker and ask for conclusions with file and line.
+- Build through workers once a spec or checklist is approved. Check their work from the diff and the tests, not by reading the whole files again.
+- Do not read a file again that is already in this conversation, unless it changed. When you know which part you need, read that part.
+- Look at an image once and write down what you saw.
+- A hook (`~/.claude/scripts/context-check.mjs`) adds the "Context check" note. When it says the conversation is large, act on it at the next approval point. When it says the conversation has been idle, tell the user straight away, then do what they asked. Mention either once, not on every turn.
 
 # Finishing work
 

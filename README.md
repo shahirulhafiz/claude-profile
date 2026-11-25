@@ -31,6 +31,7 @@ It solves three problems:
 | Project scaffold | Creates `CLAUDE.md`, `specs/`, `memory/` and `archive/` in a new project root. | Automatically, when a session starts in a new project |
 | Session briefing | Gives Claude the latest log entries, tickets in progress and recent commits. | Automatically, at the start of every session |
 | Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before every subagent call |
+| Context check | Adds a note for Claude when the conversation has grown large, or is picked up again after a break, so it suggests a new session at the next approval point. | Automatically, each time you send a message |
 | Memory in Open Knowledge Format (OKF) | Every memory records where it came from, who confirmed it, its status and when to check it again. | Whenever Claude saves a memory |
 | `/dream` | Reviews past sessions in the background and proposes memory changes, with the sessions as evidence. | Automatically after 3 new sessions and 24 hours; you approve with `/dream` |
 | `/sweep` | Finds outdated TODOs, plans, rules and memories, proves each against the code, and proposes what to archive, update or cut. | When you type `/sweep` |
@@ -65,6 +66,7 @@ The global `CLAUDE.md` loads in every session. The main rules are:
 - **Check before building.** For a feature request that is not a numbered ticket, Claude compares it with `specs/prd.md` and the tickets first, flags overlap or conflict, and asks before building.
 - **Ticket status.** Every ticket carries `Status: not started`, `Status: in progress` or `Status: done`, checked against the app.
 - **Workers get a named model.** Claude plans the work itself and gives tasks that can run side by side to subagents: sonnet for simple tasks, opus for harder ones, haiku for file search and logs. Every subagent call names its model.
+- **Sessions stay small.** One session per ticket or phase, with subagents doing the heavy reading and the building. See [Keeping the session small](#keeping-the-session-small).
 
 ### The model check
 
@@ -73,6 +75,20 @@ A subagent started without a model runs on the session's model, which is usually
 A hook runs `require-agent-model.mjs` before each subagent call. If the call names no model, the hook blocks it with a message that points to the rule. Forks are let through, because they always run on the session's model. If the hook itself fails, it lets the call through, so a fault never blocks work.
 
 This came from measuring two real working sessions. Every subagent call that named a model ran on that model. The calls that named none, all to plugin review agents, started 37 subagents on the session's model, and those made up about half of what the two sessions cost. On the model the rule intended, they would have cost about half as much.
+
+### Keeping the session small
+
+Every turn re-reads the whole conversation. A session that keeps growing costs more on every turn, and after a break the whole of it is sent again at full price.
+
+The rules in `CLAUDE.md` aim at three habits:
+
+- **One session per ticket or phase.** A phase ends where Claude already stops for you: an approval point or the end of a request. Once the context check's note has appeared, Claude adds one line there suggesting a new session, with the plan on disk and the log line written. It does not stop anywhere else for this. The briefing then carries the state across.
+- **Workers do the heavy reading and the building.** Claude reads the files it is about to edit. A survey of more than about three files, and a build from an approved spec, go to a subagent that reports back conclusions.
+- **Nothing is read twice.** A file already in the conversation is not read again unless it changed, and an image is looked at once.
+
+A hook runs `context-check.mjs` each time you send a message. It reads the size of the conversation from the session's transcript and adds one line for Claude in two cases: the conversation is at 250,000 tokens or more, or it is at 150,000 or more and has been idle for over an hour. After a break the note tells Claude to say so straight away, because the cost falls on the very next turn; otherwise it waits for the next approval point. The hook only advises. It cannot start or shorten a session, and it never blocks a message.
+
+This came from measuring one long working session. Its conversation grew from 94,000 to 829,000 tokens with no reset. File reads by the main session made up 27% of that and files it wrote itself 20%. It was also picked up again after a 94-minute break at 453,000 tokens, which sent all of that again at full price.
 
 ### The scaffold
 
@@ -247,7 +263,7 @@ my-project/
 
 Needs Claude Code and Node.js. No clone is needed.
 
-1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, four scripts, two skills and the hooks.
+1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, five scripts, two skills and the hooks.
 2. Paste it into Claude Code on that machine. Claude merges the rules with what is already there, backs up any file before replacing it, adds the hooks with that machine's own home path, and tests the result.
 3. Start a new session.
 
@@ -262,6 +278,7 @@ Paste the latest version of the same prompt again to update a machine.
 | Set up a project that already has `CLAUDE.md` or `AGENTS.md` | `node ~/.claude/scripts/project-scaffold.mjs --update-claude-md <folder>` |
 | Keep a project out of the automatic setup | Create an empty `.claude/no-scaffold` file in it |
 | Dream more or less often | Set the environment variables `DREAM_MIN_SESSIONS` (default 3) and `DREAM_MIN_HOURS` (default 24) |
+| Be told earlier or later that a conversation is large | Set the environment variable `CONTEXT_WARN_TOKENS` (default 250000). The note after a break starts at 60% of it. |
 | Run a dream now | Type `/dream` when no proposals are waiting |
 
 ## What else is possible
@@ -299,6 +316,8 @@ Tested on 2026-11-24, on one Windows 11 machine, with Claude Code 2.1.330 and No
 | 13 | The model check script blocks a subagent call with no model and allows the rest. | On 2026-11-25, piped 11 hook inputs into the script: calls with no model, a blank model and a `null` model; calls with a model; a fork; another tool; empty and invalid input. | Pass. Exit code 2 with the message for the calls with no usable model, exit code 0 for everything else. |
 | 14 | The model check blocks a real subagent call that names no model, and allows one that names a model. | On 2026-11-25, in a new session with the hook loaded, made one subagent call with no model and one with `model: "haiku"`. | Pass. The first was blocked before any subagent started, with the hook's message shown once. The second ran and returned its answer. |
 | 15 | The model check also covers a call made by a subagent. | Same session. A subagent started with a model was told to start its own subagent with no model. | Pass. The nested call was blocked with the same message and no subagent ran. |
+| 16 | The context check script reports a large conversation and a resumed one, and stays silent otherwise. | On 2026-11-25, ran the script against 34 made-up transcripts and inputs: sizes on both sides of each threshold, idle times on both sides of 60 minutes, subagent and error entries, missing and invalid times, lines of 3 MB, and missing or invalid input. Also ran it against a real 15 MB transcript. | Pass. All 34 gave the expected line or none, always with exit code 0. A conversation that is both large and idle gets the note about the break. The real transcript took 0.3 seconds and gave 834,000 tokens, which matches that session's measured peak. |
+| 17 | The context check's note reaches Claude in a real session. | On 2026-11-25, installed the hook during a working session of about 300,000 tokens and kept working. | Pass. From the next message on, the note arrived as hook output on every message, with the size rising from 303,000 to 311,000 tokens. The hook was picked up without starting a new session. |
 
 ### Measured
 
@@ -320,6 +339,8 @@ The digest holds the 20 most recent sessions. On a project with a long history, 
 | 3 | Repeatability. | Each live behaviour (rows 3 and 4) was seen in one session, on one model, on a tiny project. A rule Claude follows can still be missed in a long or interrupted session. |
 | 4 | The last round of wording fixes (see below). | Made after the tests that found them; not re-run. |
 | 5 | Whether this reduces repeated mistakes over time. | Needs weeks of use. |
+| 6 | The note after a break, in a real session. | It needs a session left idle for over an hour. The logic is covered by row 16 above, and the note uses the same path as the one in row 17. |
+| 7 | Whether Claude acts on the note and on the "Keeping the session small" rules. | These are rules Claude follows, not enforced steps. Needs real use. |
 ### Changed after testing
 
 The tests found defects. All are fixed in the files. The first group was re-tested by rows 5, 8 and 10; the last group was not.
@@ -343,6 +364,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 - **A session still has to start.** Nothing here makes Claude continue working between sessions.
 - **The log line is a rule Claude follows, not an enforced step.** If a session is cut off, the line can be missing. The briefing still shows tickets and commits.
 - **The model check enforces that a model is named, not which one.** A subagent started without a model runs on the session's model, and many plugin agents are set up that way. The hook blocks such a call, and its message tells Claude to repeat it with a model; choosing sonnet, opus or haiku is still the rule in `CLAUDE.md`. Forks are exempt, because they always run on the session's model.
+- **The context check only advises.** It adds a note; it cannot start a new session or shorten the current one, and it never blocks a message. The size comes from the last reply, so it is one turn behind. The note repeats on every message while the conversation is over the size, and the rule tells Claude to mention it once.
 - **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them (observed on this machine). Files in a project's `memory/` folder are strict OKF.
 - **Sessions started in a different folder are not part of a project's dream.** Only the project root and its Claude worktrees are.
 
@@ -356,7 +378,8 @@ One thing noticed and left as it is: a dream started inside a session also reads
 | `profile/scripts/session-brief.mjs` | `~/.claude/scripts/` | The start-of-session briefing, and the check for whether a dream is due. |
 | `profile/scripts/session-digest.mjs` | `~/.claude/scripts/` | Shortens saved session transcripts into one digest for a dream. |
 | `profile/scripts/require-agent-model.mjs` | `~/.claude/scripts/` | Blocks a subagent call that names no model. |
-| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks and the model check that runs before each subagent call. |
+| `profile/scripts/context-check.mjs` | `~/.claude/scripts/` | Adds a note when the conversation is large or is resumed after a break. |
+| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks, the context check that runs when you send a message, and the model check that runs before each subagent call. |
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill. |
 | `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill. |
 | `build-prompt.mjs` | stays here | Rebuilds `SETUP-PROMPT.md` from `profile/`. |
@@ -365,7 +388,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 
 `profile/` is the source. `SETUP-PROMPT.md` is generated from it.
 
-1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the four scripts and the two skills into `profile/` and show me the diff".
+1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the five scripts and the two skills into `profile/` and show me the diff".
 2. Run `node build-prompt.mjs` to rebuild the prompt.
 3. Commit both.
 
@@ -374,6 +397,13 @@ Keep secrets out: no tokens, no `settings.json` from a real machine, no memory f
 ## Change log
 
 Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Code to bring a machine up to date.
+
+### 2026-11-25, second change
+
+- **Added rules for keeping the session small.** A new `CLAUDE.md` section: one session per ticket or phase, subagents do the heavy reading and the building, nothing is read twice. The "How to work" and "Subagents" sections were changed to agree with it. See [Keeping the session small](#keeping-the-session-small).
+- **Added the context check.** A new hook script, `context-check.mjs`, adds a note for Claude when the conversation is large or is resumed after a break.
+- **Setup prompt.** It now holds 9 files (five scripts) and adds a third hook entry, under `UserPromptSubmit`.
+- **Tested live.** The note arrived as hook output in a real session of about 300,000 tokens. See [Verified](#verified), rows 16 and 17. The note after a break, and whether Claude acts on the rules, are still open: see [Not verified](#not-verified), rows 6 and 7.
 
 ### 2026-11-25
 

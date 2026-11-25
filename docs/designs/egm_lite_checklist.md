@@ -1,117 +1,151 @@
-# Checklist: every worker call names a model
+# Checklist: keeping the main session small
 
-**Task.** Workers (subagents) ran on the session's model whenever a call named
-no model. Make the rule explicit and enforce it with a hook.
+**Task.** In one measured session the main conversation grew from 94K to 829K
+tokens with no reset: the conductor read, wrote and built everything itself,
+and the session was resumed after a 94-minute break at 453K. Add rules that
+keep the session small, and a hook that warns when it is large or when a long
+session is resumed after a break.
 
-**Baseline.** Commit `7725e26`, clean working tree. Every change since then
-belongs to this task.
+**Baseline.** Commit `1c9a81e`, clean working tree. The one change before
+this task's first edit is a rename: the previous checklist is kept as
+[2026-11-25-model-check-checklist.md](2026-11-25-model-check-checklist.md).
 
-**Spec review.** One cold review on 2026-11-25: six findings. Five are folded
-in below; one part was contested and accepted by the user (see the end).
+**Spec review.** One cold review on 2026-11-25: seven findings. Six are
+folded in below; one was contested and accepted by the user (see the end).
 
 ## Repo changes
 
-- [x] Create `profile/scripts/require-agent-model.mjs`. A `PreToolUse` hook
-  script. It reads the hook's JSON from standard input. If `tool_name` is
-  `Agent` or `Task`, `tool_input` is an object, and
-  `tool_input.subagent_type` is not `fork`, the call is blocked unless
-  `tool_input.model` is a string with non-space characters. A blocked call
-  prints one line to standard error and exits with code 2. Every other case,
-  including a missing `tool_input`, unreadable input and any error inside the
-  script, exits 0, so a fault in the hook never blocks work.
-- [x] Edit [profile/settings.hooks.json](../../profile/settings.hooks.json).
-  Add a `PreToolUse` entry with matcher `Agent|Task` that runs
-  `node "<HOME>/.claude/scripts/require-agent-model.mjs"`, timeout 10.
-- [x] Edit the `# Models` section of
-  [profile/CLAUDE.md](../../profile/CLAUDE.md). Keep the three model lines.
-  Add: every worker call names a model, including plugin agents; a call with
-  no model runs on the session's model; tell a worker that starts its own
-  workers which model to give them; a hook blocks calls that name none.
-- [x] Edit [build-prompt.mjs](../../build-prompt.mjs). Add the script to
-  `parts` (File 5; skills become 6 and 7, hooks File 8). Update the
-  instruction text: scripts step, skills step, hooks step (two lists, three
-  commands, update in place), four scripts in `node --check`, and one piped
-  check of the installed script.
-- [x] Run `node build-prompt.mjs` to regenerate `SETUP-PROMPT.md`.
-- [x] Edit [README.md](../../README.md): "What you get" row, "four scripts"
-  in the setup steps and in "Change the profile", the file table (new script
-  row, new hooks wording), "Verified" row 13 for the piped tests, "Not
-  verified" rows 6 and 7 for the two live tests, and a "By design" line on
-  what the hook does and does not enforce.
+- [x] Edit [profile/CLAUDE.md](../../profile/CLAUDE.md):
+  - `# How to work`: the "give tasks to workers" line now also covers reading
+    or building that would fill the conversation, so it no longer contradicts
+    the new section (spec review finding).
+  - `# Subagents`: start one for parallel work or for reading or building
+    that would fill the conversation; not for a lookup or one-step change.
+  - New `# Keeping the session small` after it, with the approved wording,
+    plus one line on the hook's "Context check" note.
+- [x] Create `profile/scripts/context-check.mjs`, a `UserPromptSubmit` hook
+  script.
+  - Input: the hook's JSON on standard input; uses `transcript_path` only.
+  - It reads the last 2 MB of that file. If the read did not start at the
+    beginning of the file, the first (cut-off) line is dropped. It scans the
+    lines backwards for the newest usable entry. If there is none and the
+    file is bigger, it reads the last 32 MB once and scans again.
+  - Usable entry: `type` is `assistant`, not `isSidechain`, `message.model`
+    is not `<synthetic>`, and the usage sum is above 0.
+  - Context size = `input_tokens` + `cache_creation_input_tokens` +
+    `cache_read_input_tokens`. Idle time = whole minutes since the entry's
+    `timestamp`; a missing or unreadable time, or one in the future, counts
+    as 0, which suppresses only the resume line.
+  - Threshold: `CONTEXT_WARN_TOKENS`, default 250000; a value that is not a
+    positive number falls back to the default.
+  - Output, at most one line starting `Context check:`:
+    - size at or above 60% of the threshold and idle for more than 60
+      minutes: the "resume" line (it wins when the size is also over the
+      threshold);
+    - else size at or above the threshold: the "large" line;
+    - otherwise nothing.
+  - Always exits 0. Any fault prints nothing.
+- [x] Edit [profile/settings.hooks.json](../../profile/settings.hooks.json):
+  a `UserPromptSubmit` entry (no matcher) running the script, timeout 10.
+- [x] Edit [build-prompt.mjs](../../build-prompt.mjs): the script is File 6
+  (skills 7 and 8, hooks File 9); five scripts; the hooks step covers three
+  lists and four commands; one piped check of the new script.
+- [x] Run `node build-prompt.mjs`: `SETUP-PROMPT.md` now holds 9 files.
+- [x] Edit [README.md](../../README.md): "What you get" row; a rule bullet
+  and the section "Keeping the session small"; "five scripts" in two places;
+  the `CONTEXT_WARN_TOKENS` row; the file table; "Verified" row 16; "Not
+  verified" rows 6 to 8; a "By design" line; a second 2026-11-25 change log
+  entry that states "9 files (five scripts)".
 
 ## Tests in the repo
 
-- [x] `node --check profile/scripts/require-agent-model.mjs` passes.
-- [x] Pipe test, 11 cases, all pass:
-  - blocked (exit 2): `Agent` with no model; blank model; `model: null`;
-    `subagent_type: "Explore"` with no model; `Task` with no model
-  - allowed (exit 0): `Agent` with `model: "sonnet"`; fork with no model;
-    `Read`; `Agent` with no `tool_input`; empty input; invalid JSON
-- [x] `profile/settings.hooks.json` parses as JSON.
-- [x] `SETUP-PROMPT.md` holds the new script (File 5) and the `PreToolUse`
-  entry (File 8).
+- [x] `node --check profile/scripts/context-check.mjs` passes.
+- [x] Pipe tests: 34 cases, all pass, all exit 0. They cover:
+  - sizes: 300K, 100K, exactly 250000, 249999
+  - resume: 200K at 2 hours, at 1 minute, at exactly 60 minutes (nothing),
+    at 62 minutes; exactly 150000 and 149999 at 2 hours; 300K at 2 hours
+    and 453K at 94 minutes (the measured case) give the "resume" line; 300K
+    at exactly 60 minutes gives the "large" line
+  - times: missing, unreadable, in the future (no resume line); 300K with no
+    time still gives the "large" line
+  - entries: a newer sidechain entry, a newer `<synthetic>` entry and a
+    newer zero-usage entry are skipped; an invalid last line is skipped; no
+    assistant entry gives nothing
+  - big lines: a 3 MB line after the entry (second read), a tail that starts
+    mid-line, and a transcript that is only a 3 MB line
+  - threshold: `100000`, `abc` and `-5`
+  - input: `transcript_path` missing, not a string, pointing to no file;
+    empty input, invalid JSON, `null`
+- [x] One run against a real 15 MB transcript: 0.3 seconds, 834K tokens,
+  which matches that session's measured peak.
+- [x] `profile/settings.hooks.json` parses.
+- [x] `SETUP-PROMPT.md` holds the new script (File 6) and the
+  `UserPromptSubmit` entry (File 9).
 
 ## Install on this machine (approved by the user, 2026-11-25)
 
-- [x] Back up `~/.claude/settings.json` and `~/.claude/CLAUDE.md` as
-  `<name>.bak-20261125`.
-- [x] Copy the script to `~/.claude/scripts/`; identical to the repo copy.
-- [x] Add the `PreToolUse` entry to `~/.claude/settings.json` as its own
-  entry. The only difference from the backup is that entry.
-- [x] Replace the `# Models` section in `~/.claude/CLAUDE.md` with the repo
-  version.
-- [x] Add the EGM model line to this machine's own "Making changes: route
-  first" section (not in the repo): sonnet for `egm:egm-style`,
-  `egm:egm-structural`, `egm:egm-comprehension`; opus for
-  `egm:egm-synthesizer` and the other reviewers; tell the synthesizer which
-  model to give each reviewer.
-- [x] `~/.claude/settings.json` still parses.
-- [x] Run the exact installed command with a model-less `Agent` call piped
-  in: exit 2 with the message.
+- [x] Backups: `settings.json.bak-20261125-0917`, `CLAUDE.md.bak-20261125-0917`.
+- [x] Script copied to `~/.claude/scripts/`; identical to the repo copy.
+- [x] `UserPromptSubmit` entry added to `~/.claude/settings.json` as its own
+  entry after the existing one. That is the only difference from the backup,
+  and the file parses.
+- [x] `~/.claude/CLAUDE.md`: the sections from `# How to work` to
+  `# Keeping the session small` are identical to the repo.
+- [x] The installed script, run against this session's own transcript,
+  printed the "large" line (about 293K tokens).
 
-## Diff review fixes (cold review, 2026-11-25: two findings, both fixed)
+## Diff review fixes (cold review, 2026-11-25: three findings, all fixed)
 
-- [x] README: the "What you get" row and the "By design" line no longer state
-  the hook's live behaviour as proven; they point to "Not verified" rows 6
-  and 7.
-- [x] This machine's EGM line names `egm:egm-bootstrap-orchestrator` (opus)
-  and tells both it and the synthesizer which model to give their workers.
+- [x] Script: when a conversation is both large and idle for over an hour,
+  the resume note wins. Before, the measured case (453K after 94 minutes)
+  got the "at the next approval point" note.
+- [x] Rule: the hook bullet names both cases. The large note waits for the
+  next approval point; the idle note is mentioned straight away.
+- [x] Rule: a phase ends where Claude already stops for the user. It does
+  not stop anywhere else for this, the suggestion is a remark and not a
+  question, and it is made only once a "Context check" note has appeared.
+- [x] Applied to the repo and to this machine (script and rules identical),
+  tests re-run, `SETUP-PROMPT.md` rebuilt, README updated.
 
 ## Deferred empirical tests
 
-Run on 2026-11-25 in a new session with the hook loaded. All pass.
-
-- [x] A worker call with no model was blocked before any worker started,
-  with the hook's message shown once. A call with `model: "haiku"` ran.
-- [x] Claude Code reports the tool as `Agent`: the message was prefixed
-  `PreToolUse:Agent hook error`, so the `Agent|Task` matcher fires.
-- [x] The hook also fires for a call made by a worker: a worker started with
-  a model tried to start its own worker with no model and was blocked with
-  the same message.
-- [x] README "Not verified" rows 6 and 7 moved to "Verified" rows 14 and 15,
-  and the plain wording restored in "What you get" and "By design".
+- [x] Text the hook prints reaches Claude as context, and the hook input
+  carries a usable `transcript_path`. Seen on 2026-11-25 in the working
+  session that installed it: the note arrived as `UserPromptSubmit hook
+  success` output on each following message, at about 303K, 308K and 311K
+  tokens. No temporary setting was needed, and the hook was picked up
+  without a new session. README "Verified" row 17.
+- [ ] `[⏳ ACK]` The resume line in a real session. Not tested live; see the
+  contest below. README "Not verified" row 6.
+- [ ] `[⏳ ACK]` Whether Claude acts on the note and the rules as written
+  can only be seen over real use. README "Not verified" row 7.
 
 ## Risks
 
-- A blocked call costs one retried turn. Accepted.
-- Agent types whose own definition names a model must also name one on the
-  call. Accepted, to keep the script simple.
-- `[⏳ ACK]` A hook that hangs is assumed to let the call through when its
-  10-second timeout ends. Not tested; see the contest below.
+- The note is added on every message while the context is over the
+  threshold. Accepted: it is one short line, and the rule says to mention it
+  once. Tracking "already said" would need stored state.
+- The hook cannot know the real cache lifetime. It uses 60 minutes. Accepted.
+- The size comes from the last reply, so it lags by one turn. Accepted.
+- Rules about delegating can cost quality if overdone, because a worker's
+  report drops detail. The wording limits delegation to surveys and approved
+  builds and keeps files about to be edited with the conductor.
 
 ## Accepted CONTEST rationales
 
-- A timer that stops the script waiting for input (spec review finding).
-  Not added. Claude Code closes the hook's input, the hook timeout bounds the
-  worst case at 10 seconds, and a timer would mean asynchronous reading for a
-  case that is not expected. Accepted by the user on 2026-11-25.
+- A live test of the resume line, or a test-only switch to fake the idle
+  time (spec review finding). Not added. The resume line uses the same
+  output path as the "large" line, its logic is covered by the pipe tests,
+  and a test-only switch is extra code in a hook that should stay small.
+  Accepted by the user on 2026-11-25; README "Not verified" row 7 records it.
 
 ## Out of scope (agreed)
 
-- Changing the EGM plugin's own files; they are overwritten on update.
-- A default-subagent-model setting; it would force one model for all workers.
-- The other cost suggestions (shorter sessions, fewer review rounds, main
-  model, trimming connectors).
+- Blocking large or repeated reads with a hook: it would also block
+  legitimate reads.
+- Changing when Claude Code compacts by itself.
+- The other cost suggestions (fewer review rounds, the main model, trimming
+  connectors).
 - Committing. The user commits when they choose.
 
 ---

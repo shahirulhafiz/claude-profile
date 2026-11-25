@@ -4,7 +4,7 @@ Paste this whole file into Claude Code on the machine you want to set up. It nee
 
 ---
 
-Set up my Claude profile on this machine. Everything you need is in this message: 8 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
+Set up my Claude profile on this machine. Everything you need is in this message: 9 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
 
 The target is my Claude config folder, `~/.claude` (on Windows `%USERPROFILE%\.claude`). Call it `<CLAUDE>` and my home folder `<HOME>`.
 
@@ -19,20 +19,21 @@ Never overwrite an existing file without saving a copy first, as `<name>.bak-YYY
    - If a section on this machine says something different from File 1 (a different rule, not just different wording of the same rule), show me both versions and ask which to keep before you replace it. Until I answer, leave my version where File 1's section would go.
    - If a section I keep contradicts a section you added from File 1, tell me which two and ask.
 
-2. **Files 2, 3, 4 and 5, scripts.** Write them to `<CLAUDE>/scripts/` as `project-scaffold.mjs`, `session-digest.mjs`, `session-brief.mjs` and `require-agent-model.mjs`.
+2. **Files 2 to 6, scripts.** Write them to `<CLAUDE>/scripts/` as `project-scaffold.mjs`, `session-digest.mjs`, `session-brief.mjs`, `require-agent-model.mjs` and `context-check.mjs`.
 
-3. **Files 6 and 7, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
+3. **Files 7 and 8, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
 
-4. **File 8, hooks.** Merge it into `<CLAUDE>/settings.json`.
-   - Replace `<HOME>` in all three commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
+4. **File 9, hooks.** Merge it into `<CLAUDE>/settings.json`.
+   - Replace `<HOME>` in all four commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
    - Keep every other key in `settings.json` as it is. Create the file if it is missing.
-   - Add File 8's `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in both lists as they are.
-   - If a hook whose command contains `project-scaffold.mjs`, `session-brief.mjs` or `require-agent-model.mjs` is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
+   - File 9 has three lists. Add its `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, its `UserPromptSubmit` entry (no matcher, one command) as its own entry in the `UserPromptSubmit` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in all three lists as they are.
+   - If a hook whose command contains `project-scaffold.mjs`, `session-brief.mjs`, `require-agent-model.mjs` or `context-check.mjs` is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
 
 Then check your work and report:
 
 - `<CLAUDE>/settings.json` still parses as JSON.
-- `node --check` passes for each of the four scripts in `<CLAUDE>/scripts/`.
+- `node --check` passes for each of the five scripts in `<CLAUDE>/scripts/`.
+- In the system temp folder, write a file holding the one line `{"type":"assistant","timestamp":"<the time now, ISO 8601>","message":{"usage":{"input_tokens":300000}}}`. Run `node <CLAUDE>/scripts/context-check.mjs` with `{"transcript_path":"<that file, forward slashes>"}` on standard input. It must exit with code 0 and print one line that starts with `Context check:`. With `300000` changed to `1000` it must print nothing. Delete the file afterwards.
 - Run `node <CLAUDE>/scripts/require-agent-model.mjs` with `{"tool_name":"Agent","tool_input":{"prompt":"x"}}` on standard input. It must exit with code 2 and print a line saying the call names no model. With `"model":"sonnet"` added to `tool_input` it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): `node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
 - Run `node <CLAUDE>/scripts/session-brief.mjs` with `{"cwd":"<that folder, forward slashes>"}` on standard input. It must print a project briefing. Delete the test folder afterwards.
@@ -115,7 +116,7 @@ metadata:
 
 You're the conductor. You do the thinking: the plan, the architecture, the strategy.
 Split the job into tasks.
-Give tasks that can run at the same time to their own workers (subagents); do the rest yourself.
+Give workers (subagents) the tasks that can run at the same time, and the reading or building that would fill this conversation (see "Keeping the session small"); do the rest yourself.
 
 - Brief each worker fully: the goal, the files or area, and what done looks like. It knows only what you tell it.
 - Run independent tasks in parallel.
@@ -138,8 +139,19 @@ This covers every kind of worker:
 
 # Subagents
 
-- Each subagent adds to the session's cost.
-- Only start one for work that can run at the same time.
+- Start one for work that can run at the same time, or for reading or building that would otherwise fill this conversation.
+- Not for a lookup or a one-step change: each subagent has a start-up cost.
+
+# Keeping the session small
+
+Every turn re-reads the whole conversation, so a long session costs more on every turn.
+
+- One session per ticket or phase. A phase ends where you already stop for the user: an approval point or the end of the request. Do not stop anywhere else for this. When a "Context check" note has appeared, add one line there saying this is a good point to continue in a new session, and make sure the plan or spec is on disk and the log line is written. It is a remark, not a question: carry on if the user does.
+- Read to decide, not to survey. Read yourself the files you are about to edit and the lines you need. To learn how an area works, or to go through more than about three files, give it to a worker and ask for conclusions with file and line.
+- Build through workers once a spec or checklist is approved. Check their work from the diff and the tests, not by reading the whole files again.
+- Do not read a file again that is already in this conversation, unless it changed. When you know which part you need, read that part.
+- Look at an image once and write down what you saw.
+- A hook (`~/.claude/scripts/context-check.mjs`) adds the "Context check" note. When it says the conversation is large, act on it at the next approval point. When it says the conversation has been idle, tell the user straight away, then do what they asked. Mention either once, not on every turn.
 
 # Finishing work
 
@@ -684,7 +696,87 @@ if (block) {
 }
 ~~~~~~
 
-## File 6: <CLAUDE>/skills/sweep/SKILL.md
+## File 6: <CLAUDE>/scripts/context-check.mjs
+
+~~~~~~javascript
+#!/usr/bin/env node
+// UserPromptSubmit hook: adds one line of context when this conversation has grown large,
+// or when a long conversation is picked up again after a break.
+//
+// Every turn re-reads the whole conversation, so a long session costs more on every turn,
+// and after a break the whole of it is sent again at full price. The "Keeping the session
+// small" rule in CLAUDE.md says what to do; this hook says when.
+//
+// Reads the hook JSON on stdin and uses its "transcript_path". The size is taken from the
+// newest reply in that transcript, so it is one turn behind. Prints at most one line and
+// always exits 0: it advises, it never blocks a prompt. Anything unexpected prints nothing.
+//
+// CONTEXT_WARN_TOKENS (default 250000) sets the size that triggers the note.
+import fs from 'node:fs';
+
+const DEFAULT_WARN_TOKENS = 250000;
+const RESUME_SHARE = 0.6;      // the resume note starts at this share of the warning size
+const RESUME_MINUTES = 60;     // idle for longer than this counts as a break
+const MB = 1024 * 1024;
+// A single transcript line can be several MB (an embedded image), so look at the last 2 MB
+// first and go further back once if that holds no usable reply.
+const TAIL_SIZES = [2 * MB, 32 * MB];
+
+// The newest reply of the main conversation that carries real usage numbers.
+function newestReply(file) {
+  const size = fs.statSync(file).size;
+  const fd = fs.openSync(file, 'r');
+  try {
+    for (const tail of TAIL_SIZES) {
+      const start = Math.max(0, size - tail);
+      const buf = Buffer.alloc(size - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      const lines = buf.toString('utf8').split('\n');
+      if (start > 0) lines.shift(); // the read began mid-line: that first piece is not a whole entry
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i].includes('"usage"')) continue; // skips huge image lines without parsing them
+        let entry;
+        try { entry = JSON.parse(lines[i]); } catch { continue; }
+        if (entry?.type !== 'assistant' || entry.isSidechain) continue; // sidechain = a subagent
+        const usage = entry.message?.usage;
+        if (!usage || entry.message.model === '<synthetic>') continue;  // synthetic = an error reply
+        const tokens = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']
+          .reduce((sum, key) => sum + (Number(usage[key]) || 0), 0);
+        if (tokens > 0) return { tokens, at: Date.parse(entry.timestamp) };
+      }
+      if (start === 0) break; // the whole file was read
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return null;
+}
+
+let note = '';
+try {
+  const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}');
+  const reply = typeof input?.transcript_path === 'string' ? newestReply(input.transcript_path) : null;
+  if (reply) {
+    const wanted = Number(process.env.CONTEXT_WARN_TOKENS);
+    const warnAt = Number.isFinite(wanted) && wanted > 0 ? wanted : DEFAULT_WARN_TOKENS;
+    const size = `about ${Math.round(reply.tokens / 1000)}K tokens`;
+    // An unreadable time, or one in the future, counts as no break.
+    const idle = Number.isFinite(reply.at) ? Math.max(0, Math.floor((Date.now() - reply.at) / 60000)) : 0;
+    // The break comes first: after one, the advice is needed now, not at the next approval point.
+    if (reply.tokens >= warnAt * RESUME_SHARE && idle > RESUME_MINUTES) {
+      note = `Context check: this conversation is at ${size} and has been idle for ${idle} minutes, ` +
+        'so continuing sends all of it again at full price. Tell the user, once, that a new session is likely cheaper, then do what they ask.';
+    } else if (reply.tokens >= warnAt) {
+      note = `Context check: this conversation is at ${size}, and every turn re-reads all of it. ` +
+        'At the next approval point, write the log line and suggest to the user, once, to continue in a new session.';
+    }
+  }
+} catch { /* no transcript or unreadable input: say nothing */ }
+
+if (note) console.log(note);
+~~~~~~
+
+## File 7: <CLAUDE>/skills/sweep/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -777,7 +869,7 @@ Apply only the approved numbers.
 Finish with what was archived, updated and cut, what was skipped, and anything that failed.
 ~~~~~~
 
-## File 7: <CLAUDE>/skills/dream/SKILL.md
+## File 8: <CLAUDE>/skills/dream/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -878,7 +970,7 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 - A project without a `memory/` folder cannot take proposals: say so and offer to set it up with the scaffold script.
 ~~~~~~
 
-## File 8: merge into <CLAUDE>/settings.json
+## File 9: merge into <CLAUDE>/settings.json
 
 ~~~~~~json
 {
@@ -896,6 +988,17 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
             "type": "command",
             "command": "node \"<HOME>/.claude/scripts/session-brief.mjs\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"<HOME>/.claude/scripts/context-check.mjs\"",
+            "timeout": 10
           }
         ]
       }
