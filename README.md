@@ -30,7 +30,7 @@ It solves three problems:
 | Global rules (`CLAUDE.md`) | Tells Claude which source to trust, how to treat plans and tickets, how to write memories, and how to use subagents. | Every session, every project |
 | Project scaffold | Creates `CLAUDE.md`, `specs/`, `memory/` and `archive/` in a new project root. | Automatically, when a session starts in a new project |
 | Session briefing | Gives Claude the latest log entries, tickets in progress and recent commits. | Automatically, at the start of every session |
-| Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before each subagent call (not yet seen in a live session; see [Not verified](#not-verified), rows 6 and 7) |
+| Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before every subagent call |
 | Memory in Open Knowledge Format (OKF) | Every memory records where it came from, who confirmed it, its status and when to check it again. | Whenever Claude saves a memory |
 | `/dream` | Reviews past sessions in the background and proposes memory changes, with the sessions as evidence. | Automatically after 3 new sessions and 24 hours; you approve with `/dream` |
 | `/sweep` | Finds outdated TODOs, plans, rules and memories, proves each against the code, and proposes what to archive, update or cut. | When you type `/sweep` |
@@ -297,6 +297,8 @@ Tested on 2026-11-24, on one Windows 11 machine, with Claude Code 2.1.330 and No
 | 11 | The digest keeps what the user said. | Measured on 3 real projects with 5, 29 and 30 saved sessions. | Pass, after a fix. Every user message (39 of 39, 189 of 189, 167 of 167) and every tool error is kept. Before the fix, one project kept only 60 of 189. |
 | 12 | Sessions run in a project's Claude worktrees are included in a dream. | Counted sessions for 3 real projects. | Pass, after a fix. One project went from 26 to 30 sessions, another from 0 to 3. |
 | 13 | The model check script blocks a subagent call with no model and allows the rest. | On 2026-11-25, piped 11 hook inputs into the script: calls with no model, a blank model and a `null` model; calls with a model; a fork; another tool; empty and invalid input. | Pass. Exit code 2 with the message for the calls with no usable model, exit code 0 for everything else. |
+| 14 | The model check blocks a real subagent call that names no model, and allows one that names a model. | On 2026-11-25, in a new session with the hook loaded, made one subagent call with no model and one with `model: "haiku"`. | Pass. The first was blocked before any subagent started, with the hook's message shown once. The second ran and returned its answer. |
+| 15 | The model check also covers a call made by a subagent. | Same session. A subagent started with a model was told to start its own subagent with no model. | Pass. The nested call was blocked with the same message and no subagent ran. |
 
 ### Measured
 
@@ -318,9 +320,6 @@ The digest holds the 20 most recent sessions. On a project with a long history, 
 | 3 | Repeatability. | Each live behaviour (rows 3 and 4) was seen in one session, on one model, on a tiny project. A rule Claude follows can still be missed in a long or interrupted session. |
 | 4 | The last round of wording fixes (see below). | Made after the tests that found them; not re-run. |
 | 5 | Whether this reduces repeated mistakes over time. | Needs weeks of use. |
-| 6 | The model check blocks a real subagent call that names no model. | Hooks load when a session starts, so this needs a new session. Only the script was tested, with piped input (row 13 above). |
-| 7 | The model check also covers a call made by a subagent, such as a reviewer started by another agent. | Same reason. If it does not, only the rule in `CLAUDE.md` covers those calls. |
-
 ### Changed after testing
 
 The tests found defects. All are fixed in the files. The first group was re-tested by rows 5, 8 and 10; the last group was not.
@@ -343,7 +342,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 
 - **A session still has to start.** Nothing here makes Claude continue working between sessions.
 - **The log line is a rule Claude follows, not an enforced step.** If a session is cut off, the line can be missing. The briefing still shows tickets and commits.
-- **The model check enforces that a model is named, not which one.** A subagent started without a model runs on the session's model, and many plugin agents are set up that way. The hook is meant to block such a call so that Claude repeats it with a model; choosing sonnet, opus or haiku is still the rule in `CLAUDE.md`. Forks are exempt, because they always run on the session's model.
+- **The model check enforces that a model is named, not which one.** A subagent started without a model runs on the session's model, and many plugin agents are set up that way. The hook blocks such a call, and its message tells Claude to repeat it with a model; choosing sonnet, opus or haiku is still the rule in `CLAUDE.md`. Forks are exempt, because they always run on the session's model.
 - **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them (observed on this machine). Files in a project's `memory/` folder are strict OKF.
 - **Sessions started in a different folder are not part of a project's dream.** Only the project root and its Claude worktrees are.
 
@@ -381,7 +380,7 @@ Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Co
 - **Added the model check.** A new hook script, `require-agent-model.mjs`, blocks a subagent call that names no model. See [The model check](#the-model-check).
 - **Sharpened the Models rule.** `CLAUDE.md` now says every subagent call names a model, including plugin agents and subagents started by other subagents.
 - **Setup prompt.** It now holds 8 files (four scripts) and adds a second hook entry, under `PreToolUse`, beside the session-start hooks.
-- **Not yet proven live.** The script passes its tests, but the hook has not been seen blocking a call in a real session. See [Not verified](#not-verified), rows 6 and 7.
+- **Tested live.** In a new session the hook blocked a subagent call with no model, let through one that named a model, and blocked a call made by a subagent. See [Verified](#verified), rows 13 to 15.
 
 ### 2026-11-24
 

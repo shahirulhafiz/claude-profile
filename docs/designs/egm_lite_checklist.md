@@ -79,20 +79,17 @@ in below; one part was contested and accepted by the user (see the end).
 
 ## Deferred empirical tests
 
-All need a new session, because hooks load when a session starts.
+Run on 2026-11-25 in a new session with the hook loaded. All pass.
 
-- [ ] `[⏳ ACK]` Start a worker with no model and confirm the call is blocked
-  with the message.
-- [ ] `[⚠️ UNVERIFIED]` Claude Code reports the tool as `Agent` or `Task` in
-  `tool_name`, so the `Agent|Task` matcher fires. Settled by the test above.
-- [ ] `[⚠️ UNVERIFIED]` The hook also fires for a call made by a worker, such
-  as `egm:egm-synthesizer` starting its reviewers. Test: start one worker with
-  a model and ask it to start a worker without one. If the nested call is not
-  blocked, the rule text still covers it, and the README "By design" line
-  must say the hook only covers the top level.
-- [ ] After the tests pass, move README "Not verified" rows 6 and 7 to
-  "Verified", and restore the plain wording in the "What you get" row and the
-  "By design" line.
+- [x] A worker call with no model was blocked before any worker started,
+  with the hook's message shown once. A call with `model: "haiku"` ran.
+- [x] Claude Code reports the tool as `Agent`: the message was prefixed
+  `PreToolUse:Agent hook error`, so the `Agent|Task` matcher fires.
+- [x] The hook also fires for a call made by a worker: a worker started with
+  a model tried to start its own worker with no model and was blocked with
+  the same message.
+- [x] README "Not verified" rows 6 and 7 moved to "Verified" rows 14 and 15,
+  and the plain wording restored in "What you get" and "By design".
 
 ## Risks
 
