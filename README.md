@@ -20,6 +20,7 @@ It solves three problems:
 - [What is verified, and what is not](#what-is-verified-and-what-is-not)
 - [Files in this repository](#files-in-this-repository)
 - [Change the profile](#change-the-profile)
+- [Change log](#change-log)
 - [Where the ideas come from](#where-the-ideas-come-from)
 
 ## What you get
@@ -29,6 +30,7 @@ It solves three problems:
 | Global rules (`CLAUDE.md`) | Tells Claude which source to trust, how to treat plans and tickets, how to write memories, and how to use subagents. | Every session, every project |
 | Project scaffold | Creates `CLAUDE.md`, `specs/`, `memory/` and `archive/` in a new project root. | Automatically, when a session starts in a new project |
 | Session briefing | Gives Claude the latest log entries, tickets in progress and recent commits. | Automatically, at the start of every session |
+| Model check for workers | Blocks a subagent call that names no model, so workers do not quietly run on the session's most expensive model. | Automatically, before each subagent call (not yet seen in a live session; see [Not verified](#not-verified), rows 6 and 7) |
 | Memory in Open Knowledge Format (OKF) | Every memory records where it came from, who confirmed it, its status and when to check it again. | Whenever Claude saves a memory |
 | `/dream` | Reviews past sessions in the background and proposes memory changes, with the sessions as evidence. | Automatically after 3 new sessions and 24 hours; you approve with `/dream` |
 | `/sweep` | Finds outdated TODOs, plans, rules and memories, proves each against the code, and proposes what to archive, update or cut. | When you type `/sweep` |
@@ -62,6 +64,15 @@ The global `CLAUDE.md` loads in every session. The main rules are:
 - **Hands off what was not asked about.** Claude leaves other notes, TODOs and plans alone and lists the relevant ones at the end of its reply.
 - **Check before building.** For a feature request that is not a numbered ticket, Claude compares it with `specs/prd.md` and the tickets first, flags overlap or conflict, and asks before building.
 - **Ticket status.** Every ticket carries `Status: not started`, `Status: in progress` or `Status: done`, checked against the app.
+- **Workers get a named model.** Claude plans the work itself and gives tasks that can run side by side to subagents: sonnet for simple tasks, opus for harder ones, haiku for file search and logs. Every subagent call names its model.
+
+### The model check
+
+A subagent started without a model runs on the session's model, which is usually the most expensive one. Many plugin agents are set up to do exactly that, and an agent that starts its own subagents passes the habit on. So a rule that only says "pick a model by the task" leaks: the calls that name a model follow it, and the ones that name none quietly do not.
+
+A hook runs `require-agent-model.mjs` before each subagent call. If the call names no model, the hook blocks it with a message that points to the rule. Forks are let through, because they always run on the session's model. If the hook itself fails, it lets the call through, so a fault never blocks work.
+
+This came from measuring two real working sessions. Every subagent call that named a model ran on that model. The calls that named none, all to plugin review agents, started 37 subagents on the session's model, and those made up about half of what the two sessions cost. On the model the rule intended, they would have cost about half as much.
 
 ### The scaffold
 
@@ -236,7 +247,7 @@ my-project/
 
 Needs Claude Code and Node.js. No clone is needed.
 
-1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, three scripts, two skills and the hooks.
+1. Open [SETUP-PROMPT.md](SETUP-PROMPT.md) and copy the whole file. It holds the complete profile: the rules, four scripts, two skills and the hooks.
 2. Paste it into Claude Code on that machine. Claude merges the rules with what is already there, backs up any file before replacing it, adds the hooks with that machine's own home path, and tests the result.
 3. Start a new session.
 
@@ -285,6 +296,7 @@ Tested on 2026-11-24, on one Windows 11 machine, with Claude Code 2.1.330 and No
 | 10 | A sweep works with a separate subagent doing the checking. | A test project with 12 claims: outdated, current, unprovable, and one ticket whose checklist was met but whose goal was not. The checker got neutral claims only. | Pass. 12 of 12 correct, including the ticket (reported as started, not done). The approved list was then applied: status lines, the archive move, the index row, the log line. |
 | 11 | The digest keeps what the user said. | Measured on 3 real projects with 5, 29 and 30 saved sessions. | Pass, after a fix. Every user message (39 of 39, 189 of 189, 167 of 167) and every tool error is kept. Before the fix, one project kept only 60 of 189. |
 | 12 | Sessions run in a project's Claude worktrees are included in a dream. | Counted sessions for 3 real projects. | Pass, after a fix. One project went from 26 to 30 sessions, another from 0 to 3. |
+| 13 | The model check script blocks a subagent call with no model and allows the rest. | On 2026-11-25, piped 11 hook inputs into the script: calls with no model, a blank model and a `null` model; calls with a model; a fork; another tool; empty and invalid input. | Pass. Exit code 2 with the message for the calls with no usable model, exit code 0 for everything else. |
 
 ### Measured
 
@@ -306,6 +318,8 @@ The digest holds the 20 most recent sessions. On a project with a long history, 
 | 3 | Repeatability. | Each live behaviour (rows 3 and 4) was seen in one session, on one model, on a tiny project. A rule Claude follows can still be missed in a long or interrupted session. |
 | 4 | The last round of wording fixes (see below). | Made after the tests that found them; not re-run. |
 | 5 | Whether this reduces repeated mistakes over time. | Needs weeks of use. |
+| 6 | The model check blocks a real subagent call that names no model. | Hooks load when a session starts, so this needs a new session. Only the script was tested, with piped input (row 13 above). |
+| 7 | The model check also covers a call made by a subagent, such as a reviewer started by another agent. | Same reason. If it does not, only the rule in `CLAUDE.md` covers those calls. |
 
 ### Changed after testing
 
@@ -329,6 +343,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 
 - **A session still has to start.** Nothing here makes Claude continue working between sessions.
 - **The log line is a rule Claude follows, not an enforced step.** If a session is cut off, the line can be missing. The briefing still shows tickets and commits.
+- **The model check enforces that a model is named, not which one.** A subagent started without a model runs on the session's model, and many plugin agents are set up that way. The hook is meant to block such a call so that Claude repeats it with a model; choosing sonnet, opus or haiku is still the rule in `CLAUDE.md`. Forks are exempt, because they always run on the session's model.
 - **Built-in memories are not strict OKF.** Claude Code moves extra keys under `metadata` when it saves them (observed on this machine). Files in a project's `memory/` folder are strict OKF.
 - **Sessions started in a different folder are not part of a project's dream.** Only the project root and its Claude worktrees are.
 
@@ -341,7 +356,8 @@ One thing noticed and left as it is: a dream started inside a session also reads
 | `profile/scripts/project-scaffold.mjs` | `~/.claude/scripts/` | Sets up a project root. Only creates what is missing. |
 | `profile/scripts/session-brief.mjs` | `~/.claude/scripts/` | The start-of-session briefing, and the check for whether a dream is due. |
 | `profile/scripts/session-digest.mjs` | `~/.claude/scripts/` | Shortens saved session transcripts into one digest for a dream. |
-| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks. |
+| `profile/scripts/require-agent-model.mjs` | `~/.claude/scripts/` | Blocks a subagent call that names no model. |
+| `profile/settings.hooks.json` | merged into `~/.claude/settings.json` | The two session-start hooks and the model check that runs before each subagent call. |
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill. |
 | `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill. |
 | `build-prompt.mjs` | stays here | Rebuilds `SETUP-PROMPT.md` from `profile/`. |
@@ -350,11 +366,29 @@ One thing noticed and left as it is: a dream started inside a session also reads
 
 `profile/` is the source. `SETUP-PROMPT.md` is generated from it.
 
-1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the three scripts and the two skills into `profile/` and show me the diff".
+1. Edit the files in `profile/`. Or ask Claude: "copy my current `~/.claude/CLAUDE.md`, the four scripts and the two skills into `profile/` and show me the diff".
 2. Run `node build-prompt.mjs` to rebuild the prompt.
 3. Commit both.
 
 Keep secrets out: no tokens, no `settings.json` from a real machine, no memory files, no session digests.
+
+## Change log
+
+Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Code to bring a machine up to date.
+
+### 2026-11-25
+
+- **Added the model check.** A new hook script, `require-agent-model.mjs`, blocks a subagent call that names no model. See [The model check](#the-model-check).
+- **Sharpened the Models rule.** `CLAUDE.md` now says every subagent call names a model, including plugin agents and subagents started by other subagents.
+- **Setup prompt.** It now holds 8 files (four scripts) and adds a second hook entry, under `PreToolUse`, beside the session-start hooks.
+- **Not yet proven live.** The script passes its tests, but the hook has not been seen blocking a call in a real session. See [Not verified](#not-verified), rows 6 and 7.
+
+### 2026-11-24
+
+- **First version.** The global rules, the project scaffold hook, the `/sweep` skill and the setup prompt.
+- **Self-contained setup prompt.** One prompt holds the whole profile, so a new machine needs no clone.
+- **Session continuity.** The start-of-session briefing, the session digest and the `/dream` skill.
+- **Tested end to end.** Live sessions, a real dream, the sweep checker and the setup prompt were tested, and the defects found were fixed. See [What is verified, and what is not](#what-is-verified-and-what-is-not).
 
 ## Where the ideas come from
 

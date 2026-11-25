@@ -79,11 +79,17 @@ Give tasks that can run at the same time to their own workers (subagents); do th
 
 # Models
 
-Pick each worker's model by the task:
+Every worker call names a model. A call with no model runs on the session's model, which is usually the most expensive one. Pick the model by the task:
 
 - Simple, clear tasks -> sonnet
 - Harder tasks -> opus
 - File search, logs -> haiku
+
+This covers every kind of worker:
+
+- Agents that come from plugins need a model too. Many are set to inherit the session's model.
+- When a worker starts workers of its own, say in its brief which model to give them.
+- A hook (`~/.claude/scripts/require-agent-model.mjs`) blocks a worker call that names no model. Forks are exempt: they always run on the session's model.
 
 # Subagents
 

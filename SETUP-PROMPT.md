@@ -4,7 +4,7 @@ Paste this whole file into Claude Code on the machine you want to set up. It nee
 
 ---
 
-Set up my Claude profile on this machine. Everything you need is in this message: 7 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
+Set up my Claude profile on this machine. Everything you need is in this message: 8 files, each inside a block fenced with six tildes (`~~~~~~`). The opening fence line also carries a language word (`markdown`, `javascript` or `json`), which is not part of the file. Write each file's content exactly as given, without the fence lines, with no rewording and nothing left out. The safest way is a short script that cuts the blocks out of this message; File 1 contains its own triple-backtick block, so split only on the six-tilde fences.
 
 The target is my Claude config folder, `~/.claude` (on Windows `%USERPROFILE%\.claude`). Call it `<CLAUDE>` and my home folder `<HOME>`.
 
@@ -19,20 +19,21 @@ Never overwrite an existing file without saving a copy first, as `<name>.bak-YYY
    - If a section on this machine says something different from File 1 (a different rule, not just different wording of the same rule), show me both versions and ask which to keep before you replace it. Until I answer, leave my version where File 1's section would go.
    - If a section I keep contradicts a section you added from File 1, tell me which two and ask.
 
-2. **Files 2, 3 and 4, scripts.** Write them to `<CLAUDE>/scripts/` as `project-scaffold.mjs`, `session-digest.mjs` and `session-brief.mjs`.
+2. **Files 2, 3, 4 and 5, scripts.** Write them to `<CLAUDE>/scripts/` as `project-scaffold.mjs`, `session-digest.mjs`, `session-brief.mjs` and `require-agent-model.mjs`.
 
-3. **Files 5 and 6, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
+3. **Files 6 and 7, skills.** Write them to `<CLAUDE>/skills/sweep/SKILL.md` and `<CLAUDE>/skills/dream/SKILL.md`.
 
-4. **File 7, session-start hooks.** Merge it into `<CLAUDE>/settings.json`.
-   - Replace `<HOME>` in both commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
+4. **File 8, hooks.** Merge it into `<CLAUDE>/settings.json`.
+   - Replace `<HOME>` in all three commands with this machine's real home folder, written with forward slashes (for example `C:/Users/name` or `/Users/name`).
    - Keep every other key in `settings.json` as it is. Create the file if it is missing.
-   - Add File 7's entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list. Leave other `SessionStart` entries as they are.
-   - If a hook whose command contains `project-scaffold.mjs` or `session-brief.mjs` is already there, update it in place, and add whichever of the two commands is missing to that same entry. Never end up with the same command twice.
+   - Add File 8's `SessionStart` entry (matcher `startup` with its two commands) as its own entry in the `SessionStart` list, and its `PreToolUse` entry (matcher `Agent|Task` with its one command) as its own entry in the `PreToolUse` list. Leave the other entries in both lists as they are.
+   - If a hook whose command contains `project-scaffold.mjs`, `session-brief.mjs` or `require-agent-model.mjs` is already there, update it in place. Add whichever of the two session-start commands is missing to the entry that holds the other. Never end up with the same command twice.
 
 Then check your work and report:
 
 - `<CLAUDE>/settings.json` still parses as JSON.
-- `node --check` passes for each of the three scripts in `<CLAUDE>/scripts/`.
+- `node --check` passes for each of the four scripts in `<CLAUDE>/scripts/`.
+- Run `node <CLAUDE>/scripts/require-agent-model.mjs` with `{"tool_name":"Agent","tool_input":{"prompt":"x"}}` on standard input. It must exit with code 2 and print a line saying the call names no model. With `"model":"sonnet"` added to `tool_input` it must exit with code 0.
 - Run the scaffold by hand on a new empty folder in the system temp folder (by hand it works there; only the automatic hook skips temp folders): `node <CLAUDE>/scripts/project-scaffold.mjs <that folder>`. It must create `CLAUDE.md`, `specs/prd.md`, `specs/tickets/README.md`, `memory/index.md`, `memory/log.md`, `memory/README.md`, `archive/INDEX.md` and `.claude/settings.json`.
 - Run `node <CLAUDE>/scripts/session-brief.mjs` with `{"cwd":"<that folder, forward slashes>"}` on standard input. It must print a project briefing. Delete the test folder afterwards.
 - List what you created, what you merged, what you backed up, and anything you skipped.
@@ -123,11 +124,17 @@ Give tasks that can run at the same time to their own workers (subagents); do th
 
 # Models
 
-Pick each worker's model by the task:
+Every worker call names a model. A call with no model runs on the session's model, which is usually the most expensive one. Pick the model by the task:
 
 - Simple, clear tasks -> sonnet
 - Harder tasks -> opus
 - File search, logs -> haiku
+
+This covers every kind of worker:
+
+- Agents that come from plugins need a model too. Many are set to inherit the session's model.
+- When a worker starts workers of its own, say in its brief which model to give them.
+- A hook (`~/.claude/scripts/require-agent-model.mjs`) blocks a worker call that names no model. Forks are exempt: they always run on the session's model.
 
 # Subagents
 
@@ -641,7 +648,43 @@ try { main(); } catch { /* a briefing must never block a session */ }
 process.exit(0);
 ~~~~~~
 
-## File 5: <CLAUDE>/skills/sweep/SKILL.md
+## File 5: <CLAUDE>/scripts/require-agent-model.mjs
+
+~~~~~~javascript
+#!/usr/bin/env node
+// PreToolUse hook: blocks a worker (subagent) call that names no model.
+//
+// A worker started without a model runs on the session's model, which is usually the most
+// expensive one. The "Models" rule in CLAUDE.md says to name a model on every call; this
+// hook enforces it. Forks are exempt: they always run on the session's model.
+//
+// Reads the hook JSON on stdin. Exit 2 blocks the call and shows the message to the caller.
+// Anything unexpected (no input, bad JSON, another tool) exits 0, so a fault here never
+// blocks work.
+import fs from 'node:fs';
+
+let block = false;
+try {
+  const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}');
+  const call = input.tool_input;
+  const isWorkerCall = input.tool_name === 'Agent' || input.tool_name === 'Task';
+  if (isWorkerCall && call && typeof call === 'object' && call.subagent_type !== 'fork') {
+    // A model counts as named only if it is a string with something in it.
+    block = !(typeof call.model === 'string' && call.model.trim());
+  }
+} catch { /* unreadable input: allow the call */ }
+
+if (block) {
+  process.stderr.write(
+    'Blocked: this worker call names no model, so it would run on the session\'s model. ' +
+    'Repeat the call with "model" set, following the Models rule in CLAUDE.md: ' +
+    'sonnet for simple, clear tasks; opus for harder tasks; haiku for file search and logs.\n'
+  );
+  process.exit(2);
+}
+~~~~~~
+
+## File 6: <CLAUDE>/skills/sweep/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -734,7 +777,7 @@ Apply only the approved numbers.
 Finish with what was archived, updated and cut, what was skipped, and anything that failed.
 ~~~~~~
 
-## File 6: <CLAUDE>/skills/dream/SKILL.md
+## File 7: <CLAUDE>/skills/dream/SKILL.md
 
 ~~~~~~markdown
 ---
@@ -835,7 +878,7 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
 - A project without a `memory/` folder cannot take proposals: say so and offer to set it up with the scaffold script.
 ~~~~~~
 
-## File 7: merge into <CLAUDE>/settings.json
+## File 8: merge into <CLAUDE>/settings.json
 
 ~~~~~~json
 {
@@ -853,6 +896,18 @@ Dreamed: <ISO date-time>. Sessions reviewed: <n>.
             "type": "command",
             "command": "node \"<HOME>/.claude/scripts/session-brief.mjs\"",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"<HOME>/.claude/scripts/require-agent-model.mjs\"",
+            "timeout": 10
           }
         ]
       }

@@ -16,6 +16,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"<HOME>/.claude/scripts/require-agent-model.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
