@@ -383,6 +383,7 @@ One thing noticed and left as it is: a dream started inside a session also reads
 | `profile/skills/sweep/SKILL.md` | `~/.claude/skills/sweep/` | The `/sweep` skill. |
 | `profile/skills/dream/SKILL.md` | `~/.claude/skills/dream/` | The `/dream` skill. |
 | `build-prompt.mjs` | stays here | Rebuilds `SETUP-PROMPT.md` from `profile/`. |
+| `docs/designs/` | stays here | The approved checklist for each change, with what its reviews found. The newest is `egm_lite_checklist.md`; earlier ones carry a date in their name. |
 
 ## Change the profile
 
@@ -397,6 +398,12 @@ Keep secrets out: no tokens, no `settings.json` from a real machine, no memory f
 ## Change log
 
 Newest first. Paste the latest [SETUP-PROMPT.md](SETUP-PROMPT.md) into Claude Code to bring a machine up to date.
+
+### 2026-11-25, third change
+
+- **Recorded a smaller review panel.** An audit of two reviewed designs showed which design reviewers repeated the others. The checklist in `docs/designs/egm_lite_checklist.md` holds the evidence and the reduced panel.
+- **Not part of the profile.** The panel belongs to a separate design-review plugin, so it was applied on one machine only. The setup prompt does not install it, and nothing in `profile/` changed.
+- **Not yet proven.** Whether a session follows the smaller panel, and whether review quality holds, will only show on real design reviews.
 
 ### 2026-11-25, second change
 
